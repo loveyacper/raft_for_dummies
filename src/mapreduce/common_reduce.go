@@ -1,5 +1,14 @@
 package mapreduce
 
+import (
+    "fmt"
+    "sort"
+    "encoding/json"
+    "os"
+    //"strings"
+//    "strconv"
+    //"io/ioutil"
+)
 func doReduce(
 	jobName string, // the name of the whole MapReduce job
 	reduceTask int, // which reduce task this is
@@ -7,6 +16,49 @@ func doReduce(
 	nMap int, // the number of map tasks that were run ("M" in the paper)
 	reduceF func(key string, values []string) string,
 ) {
+    for i := 0; i < nMap; i++ {
+        var myfile string = reduceName(jobName, i, reduceTask)
+        var kvs = make(map[string] []string) // unordered_map
+        var keys []string // for sort keys
+
+        fmt.Println("read myfile " + myfile)
+        f, err := os.OpenFile(myfile, os.O_RDONLY, 0)
+        if err != nil {
+            fmt.Println("open err " + err.Error())
+        } else {
+            dec := json.NewDecoder(f)
+            for {
+                var kv KeyValue
+                err = dec.Decode(&kv)
+                if err != nil {
+                    break
+                }
+
+                if _, ok := kvs[kv.Key]; !ok {
+                    keys = append(keys, kv.Key) // new key
+                }
+
+                kvs[kv.Key] = append(kvs[kv.Key], kv.Value)
+            }
+        }
+
+        sort.Strings(keys)
+        out, err := os.OpenFile(outFile, os.O_APPEND|os.O_CREATE|os.O_RDWR,0666)
+        if err != nil {
+            fmt.Println("Create file %s failed", outFile)
+            return
+        }
+
+        enc := json.NewEncoder(out)
+        for _, key := range keys {
+            v := reduceF(key, kvs[key])
+            if err = enc.Encode(KeyValue{key, v}); err != nil {
+                fmt.Println("write [key: %s] to file %s failed", key, outFile)
+            }
+        }
+        out.Close()
+    }
+    fmt.Println("reduce Out file " + outFile)
 	//
 	// doReduce manages one reduce task: it should read the intermediate
 	// files for the task, sort the intermediate key/value pairs by key,
