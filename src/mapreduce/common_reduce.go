@@ -5,9 +5,6 @@ import (
     "sort"
     "encoding/json"
     "os"
-    //"strings"
-//    "strconv"
-    //"io/ioutil"
 )
 func doReduce(
 	jobName string, // the name of the whole MapReduce job
