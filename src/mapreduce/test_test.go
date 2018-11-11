@@ -22,9 +22,9 @@ const (
 // Create input file with N numbers
 // Check if we have N numbers in output file
 
-// Split in words
+// Split in words to kv pairs
 func MapFunc(file string, value string) (res []KeyValue) {
-	debug("Map %v\n", value)
+	debug("MapFunc %s\n", value)
 	words := strings.Fields(value)
 	for _, w := range words {
 		kv := KeyValue{w, ""}
@@ -132,6 +132,7 @@ func port(suffix string) string {
 func setup() *Master {
 	files := makeInputs(nMap)
 	master := port("master")
+    // start rpc and run master
 	mr := Distributed("test", files, nReduce, master)
 	return mr
 }
@@ -143,6 +144,7 @@ func cleanup(mr *Master) {
 	}
 }
 
+// lab1.1
 func TestSequentialSingle(t *testing.T) {
 	mr := Sequential("test", makeInputs(1), 1, MapFunc, ReduceFunc)
 	mr.Wait()
@@ -151,6 +153,7 @@ func TestSequentialSingle(t *testing.T) {
 	cleanup(mr)
 }
 
+// lab1.1
 func TestSequentialMany(t *testing.T) {
 	mr := Sequential("test", makeInputs(5), 3, MapFunc, ReduceFunc)
 	mr.Wait()
@@ -159,6 +162,7 @@ func TestSequentialMany(t *testing.T) {
 	cleanup(mr)
 }
 
+// lab 1.3
 func TestParallelBasic(t *testing.T) {
 	mr := setup()
 	for i := 0; i < 2; i++ {

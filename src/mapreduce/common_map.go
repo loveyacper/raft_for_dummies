@@ -8,12 +8,13 @@ import (
 	"os"
 )
 
+// it is called for each input file
 func doMap(
 	jobName string, // the name of the MapReduce job
 	mapTask int, // which map task this is
 	inFile string,
 	nReduce int, // the number of reduce task that will be run ("R" in the paper)
-	mapF func(filename string, contents string) []KeyValue,
+	mapF func(filename string, contents string) []KeyValue, // use defined function
 ) {
     contents, err := ioutil.ReadFile(inFile)
     if err != nil {
@@ -21,11 +22,12 @@ func doMap(
         return
     }
 
+    // produce key/value pairs from file
     kvs := mapF(inFile, string(contents))
     for _ , kv := range kvs {
         reduceTask := ihash(kv.Key) % nReduce
-        var filename string = reduceName(jobName, mapTask, reduceTask)
-        f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+        var intermediate string = reduceName(jobName, mapTask, reduceTask) // intermediate file
+        f, err := os.OpenFile(intermediate, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
         if err != nil {
             fmt.Println("open err " + err.Error())
         }

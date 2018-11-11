@@ -6,6 +6,8 @@ import (
     "encoding/json"
     "os"
 )
+
+// called for each reduce worker
 func doReduce(
 	jobName string, // the name of the whole MapReduce job
 	reduceTask int, // which reduce task this is
@@ -13,15 +15,16 @@ func doReduce(
 	nMap int, // the number of map tasks that were run ("M" in the paper)
 	reduceF func(key string, values []string) string,
 ) {
-    for i := 0; i < nMap; i++ {
-        var myfile string = reduceName(jobName, i, reduceTask)
-        var kvs = make(map[string] []string) // unordered_map
-        var keys []string // for sort keys
+    var kvs = make(map[string] []string) // unordered_map, key --> value list
+    var keys []string // for sort keys
 
-        fmt.Println("read myfile " + myfile)
-        f, err := os.OpenFile(myfile, os.O_RDONLY, 0)
+    for i := 0; i < nMap; i++ {
+        var tmpFile string = reduceName(jobName, i, reduceTask) // the intermediate file from map task
+
+        fmt.Println("doReduce read intermediate file:" + tmpFile)
+        f, err := os.OpenFile(tmpFile, os.O_RDONLY, 0)
         if err != nil {
-            fmt.Println("open err " + err.Error())
+            fmt.Println(tmpFile + " opened error: " + err.Error())
         } else {
             dec := json.NewDecoder(f)
             for {
@@ -35,22 +38,24 @@ func doReduce(
                     keys = append(keys, kv.Key) // new key
                 }
 
-                kvs[kv.Key] = append(kvs[kv.Key], kv.Value)
+                kvs[kv.Key] = append(kvs[kv.Key], kv.Value) // value list
             }
         }
 
         sort.Strings(keys)
         out, err := os.OpenFile(outFile, os.O_APPEND|os.O_CREATE|os.O_RDWR,0666)
         if err != nil {
-            fmt.Println("Create file %s failed", outFile)
+            fmt.Println("Create file failed:" + outFile)
             return
         }
 
         enc := json.NewEncoder(out)
         for _, key := range keys {
+            // call reduceF on each sorted key
             v := reduceF(key, kvs[key])
+            // output to reduce dest file
             if err = enc.Encode(KeyValue{key, v}); err != nil {
-                fmt.Println("write [key: %s] to file %s failed", key, outFile)
+                fmt.Println("write [key: " + key + "] to file failed:" + outFile)
             }
         }
         out.Close()

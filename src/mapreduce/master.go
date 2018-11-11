@@ -60,20 +60,22 @@ func newMaster(master string) (mr *Master) {
 func Sequential(jobName string, files []string, nreduce int,
 	mapF func(string, string) []KeyValue,
 	reduceF func(string, []string) string,
-) (mr *Master) {
+) (mr *Master) { // return mr as Master*
 	mr = newMaster("master")
-	go mr.run(jobName, files, nreduce, func(phase jobPhase) {
+	go mr.run(jobName, files, nreduce, func(phase jobPhase) { // schedule function
 		switch phase {
 		case mapPhase:
+            // for each file, call your mapF on it
 			for i, f := range mr.files {
 				doMap(mr.jobName, i, f, mr.nReduce, mapF)
 			}
 		case reducePhase:
-			for i := 0; i < mr.nReduce; i++ {
+            // nMap = len(mr.files), there are nMap * nReduce intermediate Files
+			for i := 0; i < mr.nReduce; i++ { // i is the reduce Task ID
 				doReduce(mr.jobName, i, mergeName(mr.jobName, i), len(mr.files), reduceF)
 			}
 		}
-	}, func() {
+	}, func() { // finish func
 		mr.stats = []int{len(files) + nreduce}
 	})
 	return
@@ -86,7 +88,7 @@ func (mr *Master) forwardRegistrations(ch chan string) {
 	i := 0
 	for {
 		mr.Lock()
-		if len(mr.workers) > i {
+		if len(mr.workers) > i { // Register RPC will append worker list
 			// there's a worker that we haven't told schedule() about.
 			w := mr.workers[i]
 			go func() { ch <- w }() // send without holding the lock.

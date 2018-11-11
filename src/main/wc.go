@@ -16,6 +16,7 @@ import (
 // and look only at the contents argument. The return value is a slice
 // of key/value pairs.
 //
+// produce key/value pairs from file
 func mapF(filename string, contents string) []mapreduce.KeyValue {
 	// Your code here (Part II).
     fmt.Println("mapF " + filename)
@@ -46,6 +47,7 @@ func reduceF(key string, values []string) string {
 // 1) Sequential (e.g., go run wc.go master sequential x1.txt .. xN.txt)
 // 2) Master (e.g., go run wc.go master localhost:7777 x1.txt .. xN.txt)
 // 3) Worker (e.g., go run wc.go worker localhost:7777 localhost:7778 &)
+// 4...) File name list
 func main() {
 	if len(os.Args) < 4 {
 		fmt.Printf("%s: see usage comments in file\n", os.Args[0])

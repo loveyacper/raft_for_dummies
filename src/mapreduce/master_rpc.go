@@ -41,11 +41,11 @@ func (mr *Master) startRPCServer() {
 			conn, err := mr.l.Accept()
 			if err == nil {
 				go func() {
-					rpcs.ServeConn(conn)
+                    rpcs.ServeConn(conn) // default: gob protocol
 					conn.Close()
 				}()
 			} else {
-				debug("RegistrationServer: accept error", err)
+				debug("RegistrationServer: accept error %v\n", err)
 				break
 			}
 		}
