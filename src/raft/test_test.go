@@ -91,8 +91,12 @@ func TestBasicAgree2B(t *testing.T) {
 	cfg.begin("Test (2B): basic agreement")
 
 	iters := 3
-	for index := 1; index < iters+1; index++ {
+    // my log index is 0-based
+	for index := 0; index < iters+1; index++ {
+	//for index := 1; index < iters+1; index++ {
+        // index is for logs index
 		nd, _ := cfg.nCommitted(index)
+        // nd is user command, 0 is invalid
 		if nd > 0 {
 			t.Fatalf("some have committed before Start()")
 		}
