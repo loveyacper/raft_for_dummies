@@ -1,0 +1,264 @@
+15:59:58.103861 [me 0]switchToFollower, prev state 0, leader Active false, leaderId -1
+15:59:58.104062 [me 1]switchToFollower, prev state 0, leader Active false, leaderId -1
+15:59:58.104114 [me 2]switchToFollower, prev state 0, leader Active false, leaderId -1
+Test (2B): agreement despite follower disconnection ...
+15:59:58.479353 [me 2] checkHealthy: onTimer leader active false
+15:59:58.479454 [me 2]switchToCandidate term 0, prev state 0
+           2开始尝试选举
+15:59:58.480325 [me 1]RequestVote handle term 1, candi 2, my term 0 and state 0, my leader -1
+15:59:58.480338 [me 0]RequestVote handle term 1, candi 2, my term 0 and state 0, my leader -1
+15:59:58.480365 [me 0]switchToFollower, prev state 0, leader Active false, leaderId -1
+15:59:58.480343 [me 1]switchToFollower, prev state 0, leader Active false, leaderId -1
+15:59:58.480555 [me 2] RequestVoteReply from 0, term 1, grant true, votes 1
+15:59:58.480581 [me 2] switchToLeader term 1
+           2称为leader, term = 1
+15:59:58.480620 [me 2] ENTER appendEntries state 2
+15:59:58.480697 [me 2] ENTER appendEntries state 2
+15:59:58.480739 [me 2] RequestVoteReply from 1, term 1, grant true, votes 2
+15:59:58.481018 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (0,0), entries 0, leaderCommit 0, my term 1, state 0
+15:59:58.481105 [me 0] AppendEntries args term 1, leader Id 2, prevIndex&Term (0,0), entries 0, leaderCommit 0, my term 1, state 0
+15:59:58.481177 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:58.481251 [me 2] 0xc0000d63c0 succ send appendEntries to 0
+           2 发起一个命令，在本地，index是1
+15:59:58.532296 [me 2]Start command 1 and state 2
+15:59:58.532598 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (0,0), entries 1, leaderCommit 0, my term 1, state 0
+15:59:58.532618 [me 0] AppendEntries args term 1, leader Id 2, prevIndex&Term (0,0), entries 1, leaderCommit 0, my term 1, state 0
+15:59:58.532680 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:58.532687 [me 2] update matchIndex to 1 for follower 1, commit = 0
+15:59:58.532690 [me 2] matchIndex 1's quorum 1
+15:59:58.532699 [me 2] update commitIndex to 1
+           commit = 1
+15:59:58.532711 [me 2] apply log index 1
+15:59:58.532733 [me 2] 0xc0000d63c0 succ send appendEntries to 0
+15:59:58.532741 [me 2] update matchIndex to 1 for follower 0, commit = 1
+15:59:58.633792 [me 0] AppendEntries args term 1, leader Id 2, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 1, state 0
+15:59:58.633813 [me 0] update commitIndex to 1, log len 2
+15:59:58.633819 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 1, state 0
+15:59:58.633831 [me 1] update commitIndex to 1, log len 2
+15:59:58.633862 [me 0] apply log index 1
+15:59:58.633872 [me 1] apply log index 1
+15:59:58.633928 [me 2] 0xc0000d63c0 succ send appendEntries to 0
+15:59:58.633950 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:58.735476 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 1, state 0
+15:59:58.735503 [me 0] AppendEntries args term 1, leader Id 2, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 1, state 0
+15:59:58.735634 [me 2] 0xc0000d63c0 succ send appendEntries to 0
+15:59:58.735654 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:58.830985 [me 0] checkHealthy: onTimer leader active true
+15:59:58.836486 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 1, state 0
+15:59:58.836576 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:58.840435 [me 0] AppendEntries args term 1, leader Id 2, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 1, state 0
+15:59:58.840536 [me 2] 0xc0000d63c0 succ send appendEntries to 0
+15:59:58.858813 [me 1] checkHealthy: onTimer leader active true
+15:59:58.938860 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 1, state 0
+15:59:58.938996 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:58.941005 [me 0] AppendEntries args term 1, leader Id 2, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 1, state 0
+15:59:58.941218 [me 2] 0xc0000d63c0 succ send appendEntries to 0
+15:59:59.038961 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 1, state 0
+15:59:59.039118 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:59.041766 [me 0] AppendEntries args term 1, leader Id 2, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 1, state 0
+15:59:59.041902 [me 2] 0xc0000d63c0 succ send appendEntries to 0
+           现在断开了raft-0
+15:59:59.104836 [me 2]Start command 2 and state 2
+15:59:59.105108 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (1,1), entries 1, leaderCommit 1, my term 1, state 0
+15:59:59.105204 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:59.105210 [me 2] update matchIndex to 2 for follower 1, commit = 1
+15:59:59.105220 [me 2] matchIndex 2's quorum 1
+15:59:59.105228 [me 2] update commitIndex to 2
+15:59:59.105238 [me 2] apply log index 2
+15:59:59.164476 [me 0] checkHealthy: onTimer leader active true
+15:59:59.207021 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (2,1), entries 0, leaderCommit 2, my term 1, state 0
+15:59:59.207042 [me 1] update commitIndex to 2, log len 3
+15:59:59.207085 [me 1] apply log index 2
+15:59:59.207151 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:59.214895 [me 2]Start command 3 and state 2
+15:59:59.215190 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (2,1), entries 1, leaderCommit 2, my term 1, state 0
+15:59:59.215277 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:59.215283 [me 2] update matchIndex to 3 for follower 1, commit = 2
+15:59:59.215287 [me 2] matchIndex 3's quorum 1
+15:59:59.215295 [me 2] update commitIndex to 3
+15:59:59.215301 [me 2] apply log index 3
+15:59:59.262965 [me 1] checkHealthy: onTimer leader active true
+15:59:59.317017 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (3,1), entries 0, leaderCommit 3, my term 1, state 0
+15:59:59.317037 [me 1] update commitIndex to 3, log len 4
+15:59:59.317077 [me 1] apply log index 3
+15:59:59.317152 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:59.417818 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (3,1), entries 0, leaderCommit 3, my term 1, state 0
+15:59:59.417899 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:59.481712 [me 0] checkHealthy: onTimer leader active false
+           0 发现了心跳超时，访问不到leader 2 // 376ms
+15:59:59.481757 [me 0]switchToCandidate term 1, prev state 0
+15:59:59.521799 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (3,1), entries 0, leaderCommit 3, my term 1, state 0
+15:59:59.521943 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:59.594651 [me 1] checkHealthy: onTimer leader active true
+15:59:59.604782 [me 2] 0xc0000d63c0 failed send appendEntries to 0, myState 2
+15:59:59.622134 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (3,1), entries 0, leaderCommit 3, my term 1, state 0
+15:59:59.622285 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:59.665859 [me 0] failed send RequestVote to 3
+15:59:59.727216 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (3,1), entries 0, leaderCommit 3, my term 1, state 0
+15:59:59.727350 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:59.801581 [me 0] checkHealthy: onTimer leader active false
+15:59:59.801604 [me 0]switchToCandidate term 2, prev state 1
+15:59:59.827679 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (3,1), entries 0, leaderCommit 3, my term 1, state 0
+15:59:59.827797 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:59.929784 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (3,1), entries 0, leaderCommit 3, my term 1, state 0
+15:59:59.929898 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+15:59:59.956213 [me 1] checkHealthy: onTimer leader active true
+16:00:00.029993 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (3,1), entries 0, leaderCommit 3, my term 1, state 0
+16:00:00.030145 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+16:00:00.130211 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (3,1), entries 0, leaderCommit 3, my term 1, state 0
+16:00:00.130334 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+16:00:00.180291 [me 2] 0xc0000d63c0 failed send appendEntries to 0, myState 2
+16:00:00.189619 [me 0] checkHealthy: onTimer leader active false
+16:00:00.189640 [me 0]switchToCandidate term 3, prev state 1
+16:00:00.230518 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (3,1), entries 0, leaderCommit 3, my term 1, state 0
+16:00:00.230611 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+16:00:00.298777 [me 1] checkHealthy: onTimer leader active true
+16:00:00.329238 [me 2]Start command 4 and state 2
+16:00:00.329567 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (3,1), entries 1, leaderCommit 3, my term 1, state 0
+16:00:00.329786 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+16:00:00.329802 [me 2] update matchIndex to 4 for follower 1, commit = 3
+16:00:00.329808 [me 2] matchIndex 4's quorum 1
+16:00:00.329823 [me 2] update commitIndex to 4
+16:00:00.329835 [me 2] apply log index 4
+16:00:00.431459 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (4,1), entries 0, leaderCommit 4, my term 1, state 0
+16:00:00.431489 [me 1] update commitIndex to 4, log len 5
+16:00:00.431538 [me 1] apply log index 4
+16:00:00.431628 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+16:00:00.441828 [me 2]Start command 5 and state 2
+16:00:00.442210 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (4,1), entries 1, leaderCommit 4, my term 1, state 0
+16:00:00.442375 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+16:00:00.442386 [me 2] update matchIndex to 5 for follower 1, commit = 4
+16:00:00.442392 [me 2] matchIndex 5's quorum 1
+16:00:00.442404 [me 2] update commitIndex to 5
+16:00:00.442415 [me 2] apply log index 5
+16:00:00.508749 [me 0] checkHealthy: onTimer leader active false
+16:00:00.508780 [me 0]switchToCandidate term 4, prev state 1
+16:00:00.544398 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (5,1), entries 0, leaderCommit 5, my term 1, state 0
+16:00:00.544428 [me 1] update commitIndex to 5, log len 6
+16:00:00.544501 [me 1] apply log index 5
+16:00:00.544545 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+16:00:00.554526 [me 2]Start command 6 and state 2
+16:00:00.554733 [me 1] AppendEntries args term 1, leader Id 2, prevIndex&Term (5,1), entries 1, leaderCommit 5, my term 1, state 0
+16:00:00.554835 [me 2] 0xc0000d63c0 succ send appendEntries to 1
+16:00:00.554842 [me 2] update matchIndex to 6 for follower 1, commit = 5
+16:00:00.554845 [me 2] matchIndex 6's quorum 1
+16:00:00.554852 [me 2] update commitIndex to 6
+16:00:00.554857 [me 2] apply log index 6
+16:00:00.571762 [me 2] 0xc0000d63c0 failed send appendEntries to 0, myState 2
+16:00:00.638779 [me 0] AppendEntries args term 1, leader Id 2, prevIndex&Term (1,1), entries 5, leaderCommit 6, my term 5, state 1
+16:00:00.638911 [me 2] 0xc0000d63c0 succ send appendEntries to 0
+16:00:00.638922 [me 2] bigger heartbeat reply term 5
+           0收到了leader2的心跳，但由于0的term更大，回复令leader2降级
+16:00:00.638928 [me 2]switchToFollower, prev state 2, leader Active false, leaderId -1
+16:00:00.658806 [me 2] not leader, EXIT appendEntries
+16:00:00.733651 [me 1] checkHealthy: onTimer leader active true
+16:00:00.740652 [me 2] not leader, EXIT appendEntries
+16:00:00.847196 [me 2] 0xc0000d63c0 failed send appendEntries to 0, myState 0
+16:00:00.920231 [me 0] checkHealthy: onTimer leader active false
+16:00:00.920283 [me 0]switchToCandidate term 5, prev state 1
+16:00:00.920671 [me 2]RequestVote handle term 6, candi 0, my term 5 and state 0, my leader -1
+16:00:00.920689 [me 1]RequestVote handle term 6, candi 0, my term 1 and state 0, my leader 2
+16:00:00.920717 [me 1]switchToFollower, prev state 0, leader Active false, leaderId -1
+16:00:00.920690 [me 2]switchToFollower, prev state 0, leader Active false, leaderId -1
+16:00:00.920942 [me 0] RequestVoteReply from 1, term 6, grant true, votes 1
+16:00:00.920955 [me 0] switchToLeader term 6
+16:00:00.920990 [me 0] RequestVoteReply from 2, term 6, grant true, votes 2
+16:00:00.921032 [me 0] ENTER appendEntries state 2
+16:00:00.921053 [me 0] ENTER appendEntries state 2
+16:00:00.921431 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:00.921448 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:00.921601 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:00.921631 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:01.007080 [me 2] 0xc0000d63c0 failed send appendEntries to 0, myState 0
+16:00:01.022715 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.022749 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.022935 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:01.022962 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:01.124551 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.124555 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.124694 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:01.124768 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:01.225948 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.226131 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:01.229135 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.229292 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:01.239228 [me 1] checkHealthy: onTimer leader active true
+16:00:01.252144 [me 2] checkHealthy: onTimer leader active true
+16:00:01.327454 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.327568 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:01.329365 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.329471 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:01.428023 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.428176 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:01.433954 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.434087 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:01.529880 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.530035 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:01.534339 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.534485 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:01.565705 [me 1] checkHealthy: onTimer leader active true
+16:00:01.572343 [me 2] checkHealthy: onTimer leader active true
+16:00:01.633678 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.633769 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:01.634367 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.634447 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:01.736154 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.736160 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.736308 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:01.736450 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:01.768780 [me 0] failed send RequestVote to 3
+16:00:01.838304 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.838327 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.838449 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:01.838470 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:01.931659 [me 2] 0xc0000d63c0 failed send appendEntries to 0, myState 0
+16:00:01.940409 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.940417 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:01.940556 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:01.940624 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:01.975684 [me 1] checkHealthy: onTimer leader active true
+16:00:01.981608 [me 2] checkHealthy: onTimer leader active true
+16:00:02.041671 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:02.041766 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:02.045070 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:02.045144 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:02.147119 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:02.147129 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:02.147270 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:02.147360 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:02.248317 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:02.248556 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:02.248638 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:02.248800 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:02.297462 [me 2] checkHealthy: onTimer leader active true
+16:00:02.351013 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:02.351031 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:02.351123 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:02.351153 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:02.368665 [me 1] checkHealthy: onTimer leader active true
+16:00:02.456068 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:02.456098 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:02.456195 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:02.456237 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:02.556896 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:02.556905 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 0, leaderCommit 1, my term 6, state 0
+16:00:02.557054 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:02.557134 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:02.575089 [me 0]Start command 2 and state 2
+16:00:02.575494 [me 1] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 1, leaderCommit 1, my term 6, state 0
+16:00:02.575530 [me 2] AppendEntries args term 6, leader Id 0, prevIndex&Term (1,1), entries 1, leaderCommit 1, my term 6, state 0
+16:00:02.575635 [me 0] 0xc0000d61e0 succ send appendEntries to 2
+16:00:02.575646 [me 0] update matchIndex to 2 for follower 2, commit = 1
+16:00:02.575652 [me 0] matchIndex 2's quorum 1
+16:00:02.575665 [me 0] update commitIndex to 2
+16:00:02.575673 [me 0] 0xc0000d61e0 succ send appendEntries to 1
+16:00:02.575679 [me 0] update matchIndex to 2 for follower 1, commit = 2
+16:00:02.575686 [me 0] apply log index 2
+16:00:02.575705 apply error: commit index=2 server=0 106 != server=2 102
+            根本原因是，leader在正常复制日志，另外一个follower断线了，过了一会follower恢复，但是分区期间，
+           它的term丢失了，从0开始，自己尝试选举，当然失败，然后不停增加term继续选举，所以它的term就很大；
+           当分区恢复，它收到了leader的心跳，但由于它的term大，使得leader降级；它自己称为leader，但是它日志又短；
+           当它发起日志复制请求，老leader和另一个follower就会发现日志已经apply了，冲突了。
+ 解决方案：查看大论文9.6节，prevote
+ 但实际上是我实现投票处理阶段有bug：我term小于参数term，就直接接受了。实际应该更新term，降级为follow，但不能直接接受，
+       要进一步检查对方的log完整性。

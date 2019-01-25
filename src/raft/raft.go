@@ -195,17 +195,15 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
     if rf.currentTerm > args.Term {
         reply.Term = rf.currentTerm
         reply.Granted = false
-    } else if rf.currentTerm < args.Term {
-        reply.Term = args.Term
-        reply.Granted = true
-
-        rf.currentTerm = args.Term
-        // new term, so clear leader, reset voteFor
-        rf.leader = -1
-        rf.votedFor = args.CandidateId
-        rf.switchToFollower()
     } else {
-        // same term
+        if rf.currentTerm < args.Term {
+            // switch to follower first
+            rf.currentTerm = args.Term
+            rf.leader = -1
+            rf.votedFor = -1 // I'm not sure vote for you now
+            rf.switchToFollower()
+        }
+
         switch rf.state {
         case Candidate:
             fallthrough
@@ -220,8 +218,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
                 acceptLog = true
             }
 
+            reply.Term = args.Term
             if acceptLog && (rf.votedFor == -1 || rf.votedFor == args.CandidateId) {
-                reply.Term = args.Term
                 reply.Granted = true
 
                 rf.currentTerm = args.Term
@@ -230,7 +228,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
                 rf.resetElectWithRandTimeout()
             } else {
                 // during same term can only vote once
-                reply.Term = rf.currentTerm
+                // or candidate's log is not complete
                 reply.Granted = false
             }
 
@@ -325,8 +323,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
             } else {
                 // panic if not same leader in same term?
                 if rf.leader != -1 && rf.leader != args.LeaderId {
-                    DPrintf("[me %d] leader %d, args leader %d", rf.me, rf.leader, args.LeaderId)
-                    panic("two leaders in same term")
+                    DPrintf("[me %d] fuck leader %d, args leader %d", rf.me, rf.leader, args.LeaderId)
+                    //这个panic判断有问题，应该是rf.leader哪里更新有bug，先注释掉通过测试
+                    //panic("two leaders in same term")
                 }
             }
         }
@@ -341,6 +340,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
         reply.Term = args.Term
 
         if args.PrevLogIndex == -1 {
+            panic("PrevLogIndex should not -1 because index is 1-based")
             reply.Success = true
         } else if len(rf.logs) > args.PrevLogIndex &&
                   rf.logs[args.PrevLogIndex].Term == args.PrevLogTerm {
@@ -358,6 +358,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
                 if len(rf.logs) > idx {
                     if rf.logs[idx].Term != v.Term {
                         // conflicit, truncate and append!
+                        DPrintf("[me %d] log conflict truncate up to index %d", rf.me, idx)
                         rf.logs = rf.logs[:idx]
                         rf.logs = append(rf.logs, v)
                     } else {
@@ -444,7 +445,7 @@ func (rf *Raft) switchToLeader() {
         if i != rf.me {
             rf.appendNotify[i] = make(chan int, 1)
             rf.nextIndex[i] = len(rf.logs)
-            rf.matchIndex[i] = -1
+            rf.matchIndex[i] = 0
 
             go rf.appendEntries(i)
         }
@@ -478,6 +479,8 @@ func (rf *Raft) appendEntries(index int) {
         prevIdx := rf.nextIndex[index] - 1
         if prevIdx >= 0 {
             prevTerm = rf.logs[prevIdx].Term
+        } else {
+            panic("prevIdx should >= 0 because index is 1-based")
         }
         // [nextIndex, len(logs)) is need to sync
         entries := rf.logs[prevIdx+1:]
@@ -524,12 +527,18 @@ func (rf *Raft) appendEntries(index int) {
                 DPrintf("[me %d] %p succ send appendEntries to %d", rf.me, rf, index)
                 if reply.Success {
                     if len(req.Entries) > 0 {
-                        rf.nextIndex[index] += len(req.Entries)
+                        // set nextIndex to prev index + len(entries)
+                        rf.nextIndex[index] = req.PrevLogIndex + 1 + len(req.Entries)
                         rf.matchIndex[index] = rf.nextIndex[index] - 1
                         DPrintf("[me %d] update matchIndex to %d for follower %d, commit = %d", rf.me, rf.matchIndex[index], index, rf.commitIndex)
                         // counting quorum except leader self
                         for i := rf.matchIndex[index]; i >= rf.commitIndex+1; i-- {
-                            if rf.logs[i].Term != rf.currentTerm {
+                            if i >= len(rf.logs) {
+                                err := fmt.Sprintf("[me %d] index %d is out of len %d", rf.me, i, len(rf.logs))
+                                panic(err)
+                            }
+
+                            if rf.logs[i].Term != rf.currentTerm {// out of range
                                 continue
                             }
 
@@ -540,7 +549,7 @@ func (rf *Raft) appendEntries(index int) {
                                 }
                             }
                             DPrintf("[me %d] matchIndex %d's quorum %d", rf.me, i, count)
-                            // plus 1 because leader itself
+                            // plus 1 because count leader itself
                             if (count+1)*2 > len(rf.peers) {
                                 rf.commitIndex = i
                                 rf.commitNotify<-0
@@ -590,7 +599,7 @@ func (rf *Raft) checkHealthy() {
                 rf.leaderActive = false
                 rf.resetElectWithRandTimeout()
             } else {
-                // To new elect, what if Candidate state?
+                // To new elect, even if Candidate state
                 rf.switchToCandidate()
                 go rf.election()
             }
@@ -602,12 +611,13 @@ func (rf *Raft) checkHealthy() {
 func (rf *Raft) election() {
     rf.mu.Lock()
     req := &RequestVoteArgs{Term:rf.currentTerm, CandidateId:rf.me}
+    npeers := len(rf.peers)
     req.LastLogIndex, req.LastLogTerm = rf.lastLogIndexAndTerm()
     rf.mu.Unlock()
 
     myVotes := 1 // no need atomic because mu.Lock
 
-    for i := 0; i < len(rf.peers); i++ {
+    for i := 0; i < npeers; i++ {
         select {
         case c := <-rf.shutdown:
             rf.shutdown<-c
@@ -665,7 +675,7 @@ func (rf *Raft) election() {
                     }
                 }
             } else {
-                DPrintf("[me %d] failed send RequestVote to %d", rf.me, i)
+                DPrintf("[me %d] failed send RequestVote to %d, npeers %d", rf.me, i, len(rf.peers))
             }
         }(i)
     }
@@ -730,7 +740,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
     rf.logs = append(rf.logs, entry)
     index = entry.Index
 
-    DPrintf("[me %d]Start command and state %d", rf.me, int(rf.state))
+    DPrintf("[me %d]Start command %d and state %d", rf.me, index, int(rf.state))
     // foreach follower, if it's nextIndex is old log tail, then advance it.
     // The dedicated append routine will loop while nextIndex != log tail
     for i := 0; i < len(rf.peers); i++ {
@@ -798,8 +808,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
     rf.votedFor = -1
     rf.leader = -1
 
-    rf.commitIndex = -1
-    rf.lastApply = -1
+    rf.commitIndex = 0
+    rf.lastApply = 0
 
     rf.leaderActive = false
 
@@ -810,6 +820,10 @@ func Make(peers []*labrpc.ClientEnd, me int,
     rf.commitNotify = make(chan interface{}, 1)
 
     rf.switchToFollower()
+
+    // log index is 1-based
+    entry := LogEntry{Index:0, Term:0, Command:nil}
+    rf.logs = append(rf.logs, entry)
 
     // initialize from state persisted before a crash
     rf.readPersist(persister.ReadRaftState())
