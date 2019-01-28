@@ -146,19 +146,22 @@ func (rf *Raft) readPersist(data []byte) {
     // Your code here (2C).
     r := bytes.NewBuffer(data)
     d := labgob.NewDecoder(r)
+
     var term int
-	var vote int
-	var logs []LogEntry
-	if  d.Decode(&term) != nil ||
-		d.Decode(&vote) != nil ||
-		d.Decode(&logs) != nil {
-		DPrintf("[me %d]: readPersist failed!", rf.me)
-	} else {
-		rf.CurrentTerm = term
-		rf.VotedFor = vote
-		rf.Logs = logs
-		DPrintf("[me %d]: readPersist term %d, vote %d, logs %v", rf.me, term, vote, logs)
-	}
+    var vote int
+    var logs []LogEntry
+
+    if  d.Decode(&term) != nil ||
+        d.Decode(&vote) != nil ||
+        d.Decode(&logs) != nil {
+        DPrintf("[me %d]: readPersist failed!", rf.me)
+        panic("readPersist failed")
+    } else {
+        rf.CurrentTerm = term
+        rf.VotedFor = vote
+        rf.Logs = logs
+        DPrintf("[me %d]: readPersist term %d, vote %d, logs %v", rf.me, term, vote, logs)
+    }
 }
 
 
@@ -302,16 +305,22 @@ type AppendEntriesArgs struct {
     PrevLogIndex int
     PrevLogTerm int
     Entries []LogEntry
-    LeaderCommit int // TODO
+    LeaderCommit int
 }
 type AppendEntriesReply struct {
      Term int // CurrentTerm, for leader to update itself
      Success bool // true if follower contained entry matching prevLogIndex/Term
+     FirstIndexOfFailTerm int // if log confilict, return the first index of conflict term
 }
 //
 // example AppendEntries RPC handler.
 //
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+    // Test (2B): concurrent Start()s .这里曾经发生了一次死循环，0.1%, 但再现不了了，现象是：
+    // 每隔100ms心跳时间，就打印下面这一句，而且对方term比我大，理论上me会成为follower，
+    // 但是没有执行，不知道在哪里卡住了？可能需要详细看下rpc实现，猜测一下死循环原因
+    // 是否是发生死锁？而rpc handler不停的产生goroutine来处理心跳包？
+    // 补充：在这个处理之前，先发生了RequestVote handle遇到大的term，但是没有进行下去
     DPrintf("[me %d] AppendEntries args term %d, leader Id %d, prevIndex&Term (%d,%d), entries %d, leaderCommit %d, my term %d, state %d",
     rf.me,
     args.Term, args.LeaderId,
@@ -333,9 +342,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
             } else {
                 // panic if not same leader in same term?
                 if rf.leader != -1 && rf.leader != args.LeaderId {
-                    DPrintf("[me %d] fuck leader %d, args leader %d", rf.me, rf.leader, args.LeaderId)
-                    //这个panic判断有问题，应该是rf.leader哪里更新有bug，先注释掉通过测试
-                    //panic("two leaders in same term")
+                    panic("two leaders in same term")
                 }
             }
         }
@@ -353,14 +360,27 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
         reply.Term = args.Term
 
-        if args.PrevLogIndex == -1 {
+        if args.PrevLogIndex < 0 {
             panic("PrevLogIndex should not -1 because index is 1-based")
-            reply.Success = true
         } else if len(rf.Logs) > args.PrevLogIndex &&
                   rf.Logs[args.PrevLogIndex].Term == args.PrevLogTerm {
             reply.Success = true
         } else {
             reply.Success = false
+            // optimize for leader's nextIndex probe
+            if len(rf.Logs) <= args.PrevLogIndex {
+                reply.FirstIndexOfFailTerm = len(rf.Logs)
+            } else {
+                i := 0
+                term := rf.Logs[args.PrevLogIndex].Term
+                for i = args.PrevLogIndex - 1; i >= 0; i-- {
+                    if rf.Logs[i].Term != term {
+                        i++
+                        break
+                    }
+                }
+                reply.FirstIndexOfFailTerm = i
+            }
             DPrintf("[me %d] log conflict my len %d, args index & term %d & %d", rf.me, len(rf.Logs), args.PrevLogIndex, args.PrevLogTerm)
         }
 
@@ -375,21 +395,16 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
                         DPrintf("[me %d] log conflict truncate up to index %d", rf.me, idx)
                         rf.Logs = rf.Logs[:idx]
                         rf.Logs = append(rf.Logs, v)
-                        needPersist = true
                     } else {
                         // overwrite
                         rf.Logs[idx] = v
-                        needPersist = true
                     }
                 } else {
                     // append
                     rf.Logs = append(rf.Logs, v)
-                    needPersist = true
                 }
-            }
 
-            if needPersist {
-                rf.persist()
+                needPersist = true
             }
 
             // process commitIndex
@@ -405,6 +420,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
                 rf.commitNotify<-0
             }
         }
+
+        if needPersist {
+            // persist even if not success, because term may changed and log is refused
+            rf.persist()
+        }
+
     }
 }
 
@@ -425,6 +446,8 @@ func (rf *Raft) switchToCandidate() {
 
     if rf.leaderActive {
         panic("switchToCandidate but leader active")
+    } else {
+        rf.leader = -1
     }
 
     rf.persist()
@@ -497,13 +520,26 @@ func (rf *Raft) appendEntries(index int) {
         // Lock and send AppendEntries RPC
         rf.mu.Lock()
         cState := rf.state
+        // must check state here, if it isn't leader, the nextIndex may be invalid,
+        // please return ASAP
+        if cState != Leader {
+            DPrintf("[me %d] not leader, EXIT appendEntries", rf.me)
+            rf.mu.Unlock()
+            return
+        }
+
         cTerm := rf.CurrentTerm
         prevTerm := -1
         prevIdx := rf.nextIndex[index] - 1
         if prevIdx >= 0 {
-            prevTerm = rf.Logs[prevIdx].Term
+            if prevIdx >= len(rf.Logs) {
+                err := fmt.Sprintf("[me %d] follower %d, prevIdx %d, logs %v", rf.me, index, prevIdx, rf.Logs)
+                panic(err)
+            }
+            prevTerm = rf.Logs[prevIdx].Term // out of range
         } else {
-            panic("prevIdx should >= 0 because index is 1-based")
+            err := fmt.Sprintf("[me %d] follower %d, prevIdx %d, next %d, logs %v", rf.me, index, prevIdx, rf.nextIndex[index], rf.Logs)
+            panic(err)
         }
         // [nextIndex, len(Logs)) is need to sync
         entries := rf.Logs[prevIdx+1:]
@@ -511,11 +547,6 @@ func (rf *Raft) appendEntries(index int) {
         // TODO for optimize
         matchIdx := rf.matchIndex[index]
         rf.mu.Unlock()
-
-        if cState != Leader {
-            DPrintf("[me %d] not leader, EXIT appendEntries", rf.me)
-            return
-        }
 
         req := &AppendEntriesArgs{Term:cTerm, LeaderId:rf.me}
         req.PrevLogIndex = prevIdx
@@ -534,7 +565,7 @@ func (rf *Raft) appendEntries(index int) {
         go func() {
             reply := new(AppendEntriesReply)
             if ok := rf.sendAppendEntries(index, req, reply); !ok {
-                DPrintf("[me %d] %p failed send appendEntries to %d, myState %d", rf.me, rf, index, int(rf.state))
+                DPrintf("[me %d] failed send appendEntries to %d, myState %d", rf.me, index, int(rf.state))
             } else {
                 rf.mu.Lock()
                 defer rf.mu.Unlock()
@@ -548,6 +579,11 @@ func (rf *Raft) appendEntries(index int) {
                 }
 
                 DPrintf("[me %d] %p succ send appendEntries to %d with entries %v", rf.me, rf, index, req.Entries)
+                // check if stale nextIndex ?
+                if rf.nextIndex[index] != req.PrevLogIndex + 1 {
+                    DPrintf("[me %d] recv appendEntries reply, but follow %d's nextIndex may stale now %d origin %d", rf.me, index, rf.nextIndex[index],   req.PrevLogIndex + 1)
+                    return
+                }
                 if reply.Success {
                     if len(req.Entries) > 0 {
                         if rf.nextIndex[index] > req.PrevLogIndex + 1 + len(req.Entries) {
@@ -600,7 +636,9 @@ func (rf *Raft) appendEntries(index int) {
                         rf.persist()
                         rf.switchToFollower()
                     } else {
-                        rf.nextIndex[index] -= 1
+                        //rf.nextIndex[index] -= 1
+                        rf.nextIndex[index] = reply.FirstIndexOfFailTerm
+                        DPrintf("[me %d] append refused by follow %d, now decr next is %d, leader logs %v", rf.me, index, rf.nextIndex[index], rf.Logs)
                         if rf.nextIndex[index] < len(rf.Logs) {
                             rf.appendNotify[index]<-0
                         } else {
@@ -624,8 +662,11 @@ func (rf *Raft) checkLeaderAlive() {
             DPrintf("[me %d] checkLeaderAlive: onTimer leader active %v",
                     rf.me,
                     rf.leaderActive)
+
+            rf.mu.Lock()
             if rf.state == Leader {
                 // ignore this timer in leader state
+                rf.mu.Unlock()
                 return
             }
 
@@ -637,6 +678,8 @@ func (rf *Raft) checkLeaderAlive() {
                 rf.switchToCandidate()
                 go rf.election()
             }
+
+            rf.mu.Unlock()
         }
     }
 }
@@ -872,3 +915,4 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
     return rf
 }
+
