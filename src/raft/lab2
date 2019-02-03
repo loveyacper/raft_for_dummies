@@ -1,0 +1,70 @@
+
+Implement Raft by adding code to raft/raft.go. In that file you'll find a bit of skeleton code, plus examples of how to send and receive RPCs.
+Your implementation must support the following interface, which the tester and (eventually) your key/value server will use. You'll find more details in comments in raft.go.
+
+// create a new Raft server instance:
+rf := Make(peers, me, persister, applyCh)
+
+// start agreement on a new log entry:
+rf.Start(command interface{}) (index, term, isleader)
+
+// ask a Raft for its current term, and whether it thinks it is leader
+rf.GetState() (term, isLeader)
+
+// each time a new entry is committed to the log, each Raft peer
+// should send an ApplyMsg to the service (or tester).
+type ApplyMsg
+A service calls Make(peers,me,…) to create a Raft peer. The peers argument is an array of established RPC connections, one to each Raft peer (including this one). The me argument is the index of this peer in the peers array. Start(command) asks Raft to start the processing to append the command to the replicated log. Start() should return immediately, without waiting for this process to complete. The service expects your implementation to send an ApplyMsg for each new committed log entry to the applyCh argument to Make().
+
+Your Raft peers should exchange RPCs using the labrpc Go package that we provide to you. It is modeled after Go's rpc library, but internally uses Go channels rather than sockets. raft.go contains some example code that sends an RPC (sendRequestVote()) and that handles an incoming RPC (RequestVote()). The reason you must use labrpc instead of Go's RPC package is that the tester tells labrpc to delay RPCs, re-order them, and delete them to simulate challenging network conditions under which your code should work correctly. Don't modify labrpc because we will test your code with the labrpc as handed out.
+
+This lab may be your first exposure to writing challenging concurrent code and your first implementation may not be clean enough that you can easily reason about its correctness. Give yourself enough time to rewrite your implementation so that you can easily reason about its correctness. Subsequent labs will build on this lab, so it is important to do a good job on your implementation.
+
+Part 2A
+
+Implement leader election and heartbeats (AppendEntries RPCs with no log entries). The goal for Part 2A is for a single leader to be elected, for the leader to remain the leader if there are no failures, and for a new leader to take over if the old leader fails or if packets to/from the old leader are lost. Run go test -run 2A to test your 2A code.
+
+Add any state you need to the Raft struct in raft.go. You'll also need to define a struct to hold information about each log entry. Your code should follow Figure 2 in the paper as closely as possible.
+Go RPC sends only struct fields whose names start with capital letters. Sub-structures must also have capitalized field names (e.g. fields of log records in an array). Forgetting to capitalize field names sent by RPC is the single most frequent source of bugs in these labs.
+Fill in the RequestVoteArgs and RequestVoteReply structs. Modify Make() to create a background goroutine that will kick off leader election periodically by sending out RequestVote RPCs when it hasn't heard from another peer for a while. This way a peer will learn who is the leader, if there is already a leader, or become the leader itself. Implement the RequestVote() RPC handler so that servers will vote for one another.
+To implement heartbeats, define an AppendEntries RPC struct (though you may not need all the arguments yet), and have the leader send them out periodically. Write an AppendEntries RPC handler method that resets the election timeout so that other servers don't step forward as leaders when one has already been elected.
+Make sure the election timeouts in different peers don't always fire at the same time, or else all peers will vote only for themselves and no one will become the leader.
+The tester requires that the leader send heartbeat RPCs no more than ten times per second.
+The tester requires your Raft to elect a new leader within five seconds of the failure of the old leader (if a majority of peers can still communicate). Remember, however, that leader election may require multiple rounds in case of a split vote (which can happen if packets are lost or if candidates unluckily choose the same random backoff times). You must pick election timeouts (and thus heartbeat intervals) that are short enough that it's very likely that an election will complete in less than five seconds even if it requires multiple rounds.
+The paper's Section 5.2 mentions election timeouts in the range of 150 to 300 milliseconds. Such a range only makes sense if the leader sends heartbeats considerably more often than once per 150 milliseconds. Because the tester limits you to 10 heartbeats per second, you will have to use an election timeout larger than the paper's 150 to 300 milliseconds, but not too large, because then you may fail to elect a leader within five seconds.
+You may find Go's time.Sleep() and rand useful.
+You'll need to write code that takes actions periodically or after delays in time. The easiest way to do this is to create a goroutine with a loop that calls time.Sleep().
+If your code has trouble passing the tests, read the paper's Figure 2 again; the full logic for leader election is spread over multiple parts of the figure.
+A good way to debug your code is to insert print statements when a peer sends or receives a message, and collect the output in a file with go test -run 2A > out. Then, by studying the trace of messages in the out file, you can identify where your implementation deviates from the desired protocol. You might find DPrintf in util.go useful to turn printing on and off as you debug different problems.
+You should check your code with go test -race, and fix any races it reports.
+Be sure you pass the 2A tests before submitting Part 2A. Note that the 2A tests test the basic operation of leader election. Parts B and C will test leader election in more challenging settings and may expose bugs in your leader election code which the 2A tests miss.
+
+Part 2B
+
+We want Raft to keep a consistent, replicated log of operations. A call to Start() at the leader starts the process of adding a new operation to the log; the leader sends the new operation to the other servers in AppendEntries RPCs.
+Implement the leader and follower code to append new log entries. This will involve implementing Start(), completing the AppendEntries RPC structs, sending them, fleshing out the AppendEntry RPC handler, and advancing the commitIndex at the leader. Your first goal should be to pass the TestBasicAgree() test (in test_test.go). Once you have that working, you should get all the 2B tests to pass (go test -run 2B).
+
+You will need to implement the election restriction (section 5.4.1 in the paper).
+While the Raft leader is the only server that initiates appends of new entries to the log, all the servers need to independently give each newly committed entry to their local service replica (via their own applyCh). You should try to keep the goroutines that implement the Raft protocol as separate as possible from the code that sends committed log entries on the applyCh (e.g., by using a separate goroutine for delivering committed messages). If you don't separate these activities cleanly, then it is easy to create deadlocks, either in this lab or in subsequent labs in which you implement services that use your Raft package. Without a clean separation, a common deadlock scenario is as follows: an RPC handler sends on the applyCh but it blocks because no goroutine is reading from the channel (e.g., perhaps because it called Start()). Now, the RPC handler is blocked while holding the mutex on the Raft structure. The reading goroutine is also blocked on the mutex because Start() needs to acquire it. Furthermore, no other RPC handler that needs the lock on the Raft structure can run.
+Give yourself enough time to rewrite your implementation because only after writing a first implementation will you realize how to organize your code cleanly. For example, only after writing one implementation will you understand how to write an implementation that makes it easy to argue that your implementation has no deadlocks.
+Figure out the minimum number of messages Raft should use when reaching agreement in non-failure cases and make your implementation use that minimum.
+You may need to write code that waits for certain events to occur. Do not write loops that execute continuously without pausing, since that will slow your implementation enough that it fails tests. You can wait efficiently with Go's channels, or Go's condition variables, or (if all else fails) by inserting a time.Sleep(10 * time.Millisecond) in each loop iteration.
+Be sure you pass the 2A and 2B tests before submitting Part 2B.
+
+Part 2C
+
+If a Raft-based server reboots it should resume service where it left off. This requires that Raft keep persistent state that survives a reboot. The paper's Figure 2 mentions which state should be persistent, and raft.go contains examples of how to save and restore persistent state.
+
+A “real” implementation would do this by writing Raft's persistent state to disk each time it changes, and reading the latest saved state from disk when restarting after a reboot. Your implementation won't use the disk; instead, it will save and restore persistent state from a Persister object (see persister.go). Whoever calls Raft.Make() supplies a Persister that initially holds Raft's most recently persisted state (if any). Raft should initialize its state from that Persister, and should use it to save its persistent state each time the state changes. Use the Persister's ReadRaftState() and SaveRaftState() methods.
+
+Implement persistence by first adding code that saves and restores persistent state to persist() and readPersist() in raft.go. You will need to encode (or "serialize") the state as an array of bytes in order to pass it to the Persister. Use Go's gob encoder to do this; see the comments in persist() and readPersist().
+
+You now need to determine at what points in the Raft protocol your servers are required to persist their state, and insert calls to persist() in those places. You must also load persisted state in Raft.Make(). Once you've done this, you should pass the remaining tests. You may want to first try to pass the "basic persistence" test (go test -run 'TestPersist12C'), and then tackle the remaining ones (go test -run 2C).
+
+In order to avoid running out of memory, Raft must periodically discard old log entries, but you do not have to worry about this until the next lab.
+
+Many of the 2C tests involve servers failing and the network losing RPC requests or replies.
+The Go gob encoder you'll use to encode persistent state only saves fields whose names start with upper case letters. Using small caps for field names is a common source of mysterious bugs, since Go doesn't warn you that they won't be saved.
+In order to pass some of the challenging tests towards the end, such as those marked "unreliable", you will need to implement the optimization to allow a follower to back up the leader's nextIndex by more than one entry at a time. See the description in the extended Raft paper starting at the bottom of page 7 and top of page 8 (marked by a gray line). The paper is vague about the details; you will need to fill in the gaps, perhaps with the help of the 6.824 Raft lectures.
+Be sure you pass all the tests before submitting Part 2C.
+

@@ -1,0 +1,98 @@
+Lab 3: 容错的KV服务
+
+介绍
+
+在这个lab你将使用lab2中的raft库构建一个容错的kv存储。这个kv服务将是一个复制状态机，由一组kv服务器组成，它们之间通过raft日志协调。只要有过半节点存活，
+你的kv服务就应该能正常工作。
+
+你的系统将由client和kv服务组成，每个kv服务也作为一个raft peer的角色。客户端向服务器发送Put,Append,Get,服务器将这些调用转存到raft日志，并按序执行；
+一个客户端能够向任意的某个服务节点发送请求，但是应该重试其他服务器如果当前的不是leader。如果操作作为raft日志commit了，操作结果应该回复给客户端。如果
+操作失败了，返回错误，客户端重试其他服务节点。
+
+本实验由两部分。A部分，实现的时候不需要考虑日志快照压缩。实验B部分，需要实现snapshot。
+
+你应该仔细读一下paper的7和8章节；
+你可以给Raft ApplyMsg添加字段，也可以给Raft RPC比如AppendEntries添加字段。
+
+Part A: kv服务，不需要日志压缩
+
+服务支持三种rpc： Put(k, v), Append(k, arg), Get(k); 若k不存在，Append相当于Put。
+
+你的kvraft客户端代码（src/kvraft/client.go的clerk类）应该尝试不同的kv服务器直到返回成功；只要客户端可以和主分区的raft leader节点通信，操作 最终一定会成功。
+
+你的第一个任务是实现一个在无消息丢失，无服务失败情况下的解决方案。你的服务必须保证Get，Put，Append返回linearizable的结果。即，调用put get append的变动对
+所有客户端看上去是一致的，它们以一个特定的顺序执行，不管是否有服务失败或者leader变化。一个put之后执行的get方法一定能够看到最近一次put的值。完整的调用应该
+有exactly-once语义。
+
+一个可行的计划是，先用kvraft通过Raft去达成一致性的"value"信息去填充server.go中的Op结构体，然后实现putappend和get处理函数；代码在server.go。
+处理函数应该使用Start将Op加入raft日志，当日志被commit时，回复客户端；注意，你不能执行一个操作，直到被commit到日志（即当它到达applyCh的时候）；
+
+当你通过第一个测试"one client"的时候就完成了任务。如果你实现的足够老练，那么"concurrent clients"也通过了。
+
+你的kvraft服务之间不应该直接通信，而是通过raft日志通信。
+
+调用Start()之后，你的kvraft服务需要等待Raft达成共识；达成共识的命令会到达applyCh；你应该仔细思考怎么组织代码让它持续读取applyCh，当putappend和get处理器
+提交命令到raft日志的时候。小心kv服务和raft库之间的死锁。
+(实际就是等待applyCh上的消息，底层raft在commit日志后，会向applyCh发命令，通知将日志命令应用到用户的状态机)
+
+你的方案需要处理leader调用了Start()，但是在请求被commit之前就失去了leader身份的情况。这种情况下，你应该让客户端重发请求到一个不同的服务进程，
+直到发现新的leader。一个方法是leader通过发现一个与Start返回的index位置相同的不同请求来意识到自己失去了leader身份，或者Raft.GetState()返回的term
+变化了。如果ex leader自己发生了分区，它不会知道新的leader；但是在相同分区的客户端也不能与新leader通信，所以让client永远等下去是合理的，直到
+分区愈合。
+
+你可能需要修改Clerk来记住最近的leader，避免浪费时间探测leader。
+一个kvraft服务不应该完成一个Get RPC如果它不是majority部分的节点。所以它不会返回stale数据；
+一个简单方案是，让每一个Get也提交Raft日志中，这样你不必要实现第8节介绍的关于只读操作的优化。
+
+假定：请求是串行的，不允许pipeline请求。
+
+BERT YOUNG：
+关于处理重复客户端请求的问题：
+为了便于思考，将整个kv服务视作一个单机服务：
+首先，与client直接交互的kvraft节点，每个节点视作一个worker线程；
+每个线程有自己的raft实例维护一份raft日志，由于强一致性，我们将raft实例视为只有一个，多个
+worker线程往里提交命令（即调用raft.Start()).（我们可以将raft实例视作一个慢IO设备，毕竟达成共识需要时间:)
+raft实例会将commit的日志命令项提交给应用的状态机（通过applyCh）；
+为了避免重复请求，每个worker线程会记录自己apply过的每个客户端的最大命令ID（单调递增的），
+小于等于它的认为是重复请求；命令只有落地到状态机，才会更新ID记录。
+所以关于请求去重就比较好理解了：
+当worker线程(kvraft 的rpc接收处理入口那)接收到客户端请求，先简单检查一下是否重复请求，这步检查
+没有也可以，但检查了是个很大的优化。
+不重复则提交请求给raft实例，当raft实例处理完成（请求命令日志项被commit），则通知我们应用层的状态机；
+因此每个worker线程的状态机只需要此时尝试将命令ID记录，失败则是重复ID，不更改状态机；
+否则更改状态机，ID记录也更新了；
+
+思考一个场景：ABC三个worker线程，A是leader接收请求，准备放在raft实例的第一个槽，但是A发生了
+分区，无法访问B和C了；所以这个请求无法commit，A陷入等待（等待请求被commit）；
+然后客户端自己重试发给了B，此时B已经称为leader，处理请求，也准备放在raft实例的第一个槽；最终成功；
+当分区愈合时，A称为B的follower，最终收到log index 1的apply，A不再等待，但是发现返回的日志项并不是
+自己投递的日志项，A知道自己是个stale leader，请求处理失败了；事实上该请求是第二次重试到B线程才成功的。
+
+
+
+Part B: kv服务，需要日志压缩
+
+kvraft服务需要经常将当前状态作为snapshot持久化，并丢弃持久化之前的日志。当服务重启时，服务首先读取snapshot，然后replay之后的日志。sec7介绍了快照机制。
+
+你应该花一些时间设计raft库和你的服务之间的接口，让raft库能够丢弃日志。思考下当往log尾部存储的时候，你的raft将怎么操作，怎样丢弃旧日志。
+
+kvraft测试将maxraftstate传递给你的StartKVServer(), maxraftstate表示raft持久化状态的字节最大大小，包括log，但不包括快照。
+你应该用maxraftstate和persister.RaftStateSize（）做比较。当kv服务检测到大小超过限制，就应该保存快照，通知raft库产生了快照，所以raft能够抛弃旧日志。
+
+你的raft.go很可能将整个log存放在slice。修改一下，能让它抛弃某一个log index之前的所有日志。
+Your raft.go probably keeps the entire log in a Go slice. Modify it so that it can be given a log index, discard the entries before that index, and continue operating while storing only log entries after that index. Make sure you pass all the Raft tests after making these changes.
+
+修改你的kv服务，能够检测底层raft的日志太大，就启动一次快照，告知raft丢弃日志。用persister.SaveSnapshot()保存每一个快照。不要使用文件。
+Modify your kvraft server so that it detects when the persisted Raft state grows too large, and then saves a snapshot and tells Raft that it can discard old log entries. Save each snapshot with persister.SaveSnapshot() (don't use files).
+
+修改你的raft leader，当follower需要的日志在leader这里已经被丢弃时，能发送一个InstallSnapshot RPC给follower；
+当follower接受时，你的raft需要发送给kvraft。你可以使用applyCh来实现，看论文中UseSnapshot字段。一个kvraft实例应该在重启的时候从快照初始化状态。
+
+Modify your Raft leader code to send an InstallSnapshot RPC to a follower when the leader has discarded the log entries the follower needs. When a follower receives an InstallSnapshot RPC, your Raft code will need to send the included snapshot to its kvraft. You can use the applyCh for this purpose — see the UseSnapshot field. A kvraft instance should restore the snapshot from the persister when it re-starts. Your solution is complete when you pass the remaining tests reliably.
+
+The maxraftstate limit applies to the GOB-encoded bytes your Raft passes to persister.SaveRaftState().
+
+Remember that your kvserver must be able to detect duplicate client requests across checkpoints, so any state you are using to detect them must be included in the snapshots. Remember to capitalize all fields of structures stored in the snapshot.
+Make sure you pass TestSnapshotRPC before moving on to the other Snapshot tests.
+A common source of bugs is for the Raft state and the snapshot state to be inconsistent with each other, particularly after re-starts or InstallSnapshots. You are allowed to add methods to your Raft for kvserver to call to help handle InstallSnapshot RPCs.
+

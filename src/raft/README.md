@@ -29,4 +29,10 @@ TestBasicAgree() test (in test_test.go). Once you have that working, you should 
    sends on the applyCh in a goroutine.
 3. Pay attention that log index is 1-based in thesis.
 
-
+目前2C的unreliable figure 8测试，约有1%的几率超时
+通过比对正常日志和超时日志，正常日志中，投票被拒绝的记录约67个，异常日志中，该记录有160个：
+[me 0] RequestVoteReply from 2, term 123, grant false, votes 2
+上面是异常的最后一条记录，term达到了123；而正常记录中，最大term只有80；
+基本可以断定是没有pre-vote机制导致的，有空加上测试。目前平均100-200次失败一次
+理论上pre vote之后，失败率可以降为0
+但有个疑点是，并没有"bigger heartbeat reply term"，也就是leader发送心跳，却收到失败回复，因为有更大的term在follower中。

@@ -107,15 +107,28 @@ type Raft struct {
 // return CurrentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
-
     var term int
     var isleader bool
     // Your code here (2A).
+
+    rf.mu.Lock()
+    defer rf.mu.Unlock()
     term = rf.CurrentTerm
     isleader = (rf.state == Leader)
     return term, isleader
 }
 
+func (rf *Raft) GetStateWithoutLock() (int, bool) {
+    var term int
+    var isleader bool
+
+    term = rf.CurrentTerm
+    isleader = (rf.state == Leader)
+    if isleader && rf.leader != rf.me {
+        panic("Why not leader me")
+    }
+    return term, isleader
+}
 
 //
 // save Raft's persistent state to stable storage,
@@ -191,13 +204,14 @@ type RequestVoteReply struct {
 // example RequestVote RPC handler.
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
+    rf.mu.Lock()
+    defer rf.mu.Unlock()
+
     DPrintf("[me %d]RequestVote handle term %d, candi %d, my term %d and state %d, my leader %d",
             rf.me,
             args.Term, args.CandidateId,
             rf.CurrentTerm, int(rf.state), rf.leader)
     // Your code here (2A, 2B).
-    rf.mu.Lock()
-    defer rf.mu.Unlock()
     if rf.CurrentTerm > args.Term {
         reply.Term = rf.CurrentTerm
         reply.Granted = false
@@ -207,6 +221,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
             // switch to follower first
             rf.CurrentTerm = args.Term
             rf.leader = -1
+            rf.leaderActive = false
             rf.VotedFor = -1 // I'm not sure vote for you now
             rf.switchToFollower()
             needPersist = true
@@ -321,6 +336,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
     // 但是没有执行，不知道在哪里卡住了？可能需要详细看下rpc实现，猜测一下死循环原因
     // 是否是发生死锁？而rpc handler不停的产生goroutine来处理心跳包？
     // 补充：在这个处理之前，先发生了RequestVote handle遇到大的term，但是没有进行下去
+    rf.mu.Lock()
+    defer rf.mu.Unlock()
+
     DPrintf("[me %d] AppendEntries args term %d, leader Id %d, prevIndex&Term (%d,%d), entries %d, leaderCommit %d, my term %d, state %d",
     rf.me,
     args.Term, args.LeaderId,
@@ -328,8 +346,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
     len(args.Entries), args.LeaderCommit,
     rf.CurrentTerm, int(rf.state))
 
-    rf.mu.Lock()
-    defer rf.mu.Unlock()
     if rf.CurrentTerm > args.Term {
         reply.Term = rf.CurrentTerm
         reply.Success = false
@@ -536,7 +552,7 @@ func (rf *Raft) appendEntries(index int) {
                 err := fmt.Sprintf("[me %d] follower %d, prevIdx %d, logs %v", rf.me, index, prevIdx, rf.Logs)
                 panic(err)
             }
-            prevTerm = rf.Logs[prevIdx].Term // out of range
+            prevTerm = rf.Logs[prevIdx].Term
         } else {
             err := fmt.Sprintf("[me %d] follower %d, prevIdx %d, next %d, logs %v", rf.me, index, prevIdx, rf.nextIndex[index], rf.Logs)
             panic(err)
@@ -565,7 +581,7 @@ func (rf *Raft) appendEntries(index int) {
         go func() {
             reply := new(AppendEntriesReply)
             if ok := rf.sendAppendEntries(index, req, reply); !ok {
-                DPrintf("[me %d] failed send appendEntries to %d, myState %d", rf.me, index, int(rf.state))
+                //DPrintf("[me %d] failed send appendEntries to %d, myState %d", rf.me, index, int(rf.state))
             } else {
                 rf.mu.Lock()
                 defer rf.mu.Unlock()
@@ -632,13 +648,18 @@ func (rf *Raft) appendEntries(index int) {
                         DPrintf("[me %d] bigger heartbeat reply term %d", rf.me, reply.Term)
                         rf.CurrentTerm = reply.Term
                         rf.leader = -1
+                        rf.leaderActive = false
+
                         rf.VotedFor = -1
                         rf.persist()
                         rf.switchToFollower()
                     } else {
                         //rf.nextIndex[index] -= 1
+                        if rf.nextIndex[index] - reply.FirstIndexOfFailTerm >= 10 {
+                            DPrintf("[me %d] refused by follow %d, optimize nextIndex %d to %d", rf.me, index, rf.nextIndex[index], reply.FirstIndexOfFailTerm)
+                        }
                         rf.nextIndex[index] = reply.FirstIndexOfFailTerm
-                        DPrintf("[me %d] append refused by follow %d, now decr next is %d, leader logs %v", rf.me, index, rf.nextIndex[index], rf.Logs)
+                        DPrintf("[me %d] refused by follow %d, decr next %d, leader logs %v", rf.me, index, rf.nextIndex[index], rf.Logs)
                         if rf.nextIndex[index] < len(rf.Logs) {
                             rf.appendNotify[index]<-0
                         } else {
@@ -659,11 +680,11 @@ func (rf *Raft) checkLeaderAlive() {
             return
 
         case <-rf.electTimer.C:
+            rf.mu.Lock()
             DPrintf("[me %d] checkLeaderAlive: onTimer leader active %v",
                     rf.me,
                     rf.leaderActive)
 
-            rf.mu.Lock()
             if rf.state == Leader {
                 // ignore this timer in leader state
                 rf.mu.Unlock()
@@ -749,11 +770,13 @@ func (rf *Raft) election() {
                     if reply.Term > req.Term {
                         rf.CurrentTerm = reply.Term
                         rf.persist()
+                        rf.leader = -1
+                        rf.leaderActive = false
                         rf.switchToFollower()
                     }
                 }
             } else {
-                DPrintf("[me %d] failed send RequestVote to %d, npeers %d", rf.me, i, len(rf.peers))
+                DPrintf("[me %d] failed send RequestVote to %d", rf.me, n)
             }
         }(i)
     }
@@ -806,7 +829,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
     defer rf.mu.Unlock()
 
     index := -1
-    term, isLeader := rf.GetState()
+    term, isLeader := rf.GetStateWithoutLock()
     if !isLeader {
         return index, term, false
     }
@@ -819,7 +842,8 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
     rf.persist()
     index = entry.Index
 
-    DPrintf("[me %d]Start command idx %d val %d and state %d", rf.me, index, command.(int), int(rf.state))
+    DPrintf("[me %d]Start command idx %d and state %d", rf.me, index, int(rf.state))
+
     // foreach follower, if it's nextIndex is old log tail, then advance it.
     // The dedicated append routine will loop while nextIndex != log tail
     for i := 0; i < len(rf.peers); i++ {

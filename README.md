@@ -1,11 +1,13 @@
-# 2017年MIT分布式系统课程实验
+# 2017年春季MIT分布式系统课程实验
 
 ## lab1 map reduce
-   see `src/mapreduce`
+   see [mapreduce](src/mapreduce)
 
 ## lab2 raft
-   see `src/raft/raft.go`
+   see [raft](src/raft)
 
 ## lab3 TODO
+   see [kvraft](src/kvraft)
+
 ## lab4 TODO
 

@@ -256,9 +256,9 @@ Test (2B): agreement despite follower disconnection ...
 16:00:02.575686 [me 0] apply log index 2
 16:00:02.575705 apply error: commit index=2 server=0 106 != server=2 102
             根本原因是，leader在正常复制日志，另外一个follower断线了，过了一会follower恢复，但是分区期间，
-           它的term丢失了，从0开始，自己尝试选举，当然失败，然后不停增加term继续选举，所以它的term就很大；
-           当分区恢复，它收到了leader的心跳，但由于它的term大，使得leader降级；它自己称为leader，但是它日志又短；
+           它尝试选举，当然失败，然后不停增加term继续选举，所以它的term就很大；
+           当分区恢复，它收到了leader的心跳，但由于它的term大，使得leader降级；它自己成为leader(my BUG)，但是它日志又短；
            当它发起日志复制请求，老leader和另一个follower就会发现日志已经apply了，冲突了。
  解决方案：查看大论文9.6节，prevote
- 但实际上是我实现投票处理阶段有bug：我term小于参数term，就直接接受了。实际应该更新term，降级为follow，但不能直接接受，
-       要进一步检查对方的log完整性。
+ 但我实现投票处理阶段有bug：我term小于参数term，就直接接受了。实际应该更新term，降级为follow，但不能直接接受，
+       还要进一步检查对方的log完整性。
