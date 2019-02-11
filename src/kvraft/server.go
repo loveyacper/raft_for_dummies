@@ -6,6 +6,8 @@ import (
     "log"
     "raft"
     "sync"
+
+    "bytes"
 )
 
 const Debug = 0
@@ -57,6 +59,9 @@ type KVServer struct {
     notifyCh map[int]chan Op
     // request records
     requests map[int32]int64 // client -> last commited reqID
+
+    // for snapshot
+    lastIncludedIndex int
 
     // for exit
     shutdown chan interface{}
@@ -220,8 +225,14 @@ func (kv *KVServer) applyRoutine() {
             return
 
         case applyMsg = <-kv.applyCh:
-            op, _ = (applyMsg.Command).(Op)
         }
+
+        if !applyMsg.CommandValid {
+            kv.loadSnapshot(applyMsg.Snapshot)
+            continue
+        }
+
+        op, _ = (applyMsg.Command).(Op)
 
         kv.mu.Lock()
         // Follower & Leader: try apply to state machine, fail if duplicated request
@@ -247,7 +258,7 @@ func (kv *KVServer) applyRoutine() {
             // likely be leader
             /*
             select {
-            case <-kv.notifyCh[applyMsg.CommandIndex]:
+            case <-ch:
             default:
             }
             */
@@ -255,8 +266,53 @@ func (kv *KVServer) applyRoutine() {
             ch <- op
         }
 
+        if kv.maxraftstate >= 0 && kv.rf.RaftStateSize() >= kv.maxraftstate {
+            DPrintf("(%d) state size %d", kv.me, kv.rf.RaftStateSize())
+            kv.startSnapshot(applyMsg.CommandIndex)
+        }
+
         kv.mu.Unlock()
     }
+}
+
+// for snapshot
+func (kv *KVServer) startSnapshot(lastIndex int) {
+    if kv.lastIncludedIndex != -1 {
+        DPrintf("[server %d] startSnapshot is in progress", kv.me)
+        return
+    }
+
+    DPrintf("[server %d] startSnapshot index %d with data %v", kv.me, lastIndex, kv.data)
+    w := new(bytes.Buffer)
+    e := labgob.NewEncoder(w)
+
+    kv.lastIncludedIndex = lastIndex
+
+    //e.Encode(kv.lastIncludedIndex)
+    e.Encode(kv.data)
+    e.Encode(kv.requests)
+
+    data := w.Bytes()
+    kv.rf.StartSnapshot(data, lastIndex)
+    kv.lastIncludedIndex = -1
+}
+
+func (kv *KVServer) loadSnapshot(data []byte) {
+    if data == nil || len(data) < 1 { // bootstrap without any state?
+        return
+    }
+
+    r := bytes.NewBuffer(data)
+    d := labgob.NewDecoder(r)
+
+    kv.mu.Lock()
+    defer kv.mu.Unlock()
+    kv.data = make(map[string]string)
+    kv.requests = make(map[int32]int64)
+
+    //d.Decode(&kv.lastIncludedIndex)
+    d.Decode(&kv.data)
+    d.Decode(&kv.requests)
 }
 
 //
@@ -299,6 +355,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
     kv.requests = make(map[int32]int64)
     kv.notifyCh = make(map[int]chan Op)
     kv.shutdown = make(chan interface{}, 1)
+    kv.lastIncludedIndex = -1
 
     kv.applyCh = make(chan raft.ApplyMsg, 10)
     kv.rf = raft.Make(servers, me, persister, kv.applyCh)

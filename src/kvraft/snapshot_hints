@@ -1,0 +1,150 @@
+*** topic: log compaction and Snapshots (Lab 3B)
+
+problem:
+  log will get to be huge -- much larger than state-machine state!
+  will take a long time to re-play on reboot or send to a new server
+
+luckily:
+  a server doesn't need *both* the complete log *and* the service state
+    the executed part of the log is captured in the state
+    clients only see the state, not the log
+  service state usually much smaller, so let's keep just that
+
+what constrains how a server discards log entries?
+  can't forget un-committed entries -- might be part of leader's majority
+  can't forget un-executed entries -- not yet reflected in the state
+  executed entries might be needed to bring other servers up to date
+
+solution: service periodically creates persistent "snapshot"
+  [diagram: service with state, snapshot on disk, raft log, raft persistent]
+  copy of entire state-machine state as of execution of a specific log entry
+    e.g. k/v table
+  service writes snapshot to persistent storage (disk)
+  service tells Raft it is snapshotted through some log index
+  Raft discards log before that index
+  a server can create a snapshot and discard prefix of log at any time
+    e.g. when log grows too long
+
+relation of snapshot and log
+  snapshot reflects only executed log entries
+    and thus only committed entries
+  so server will only discard committed prefix of log
+    anything not known to be committed will remain in log
+
+so a server's on-disk state consists of:
+  service's snapshot up to a certain log entry
+  Raft's persisted log w/ following log entries
+  the combination is equivalent to the full log
+
+what happens on crash+restart?
+  service reads snapshot from disk
+  Raft reads persisted log from disk
+    sends service entries that are committed but not in snapshot
+
+what if a follower lags and leader has discarded past end of follower's log?
+  nextIndex[i] will back up to start of leader's log
+  so leader can't repair that follower with AppendEntries RPCs
+  thus the InstallSnapshot RPC
+  (Q: why not have leader discard only entries that *all* servers have?)
+
+what's in an InstallSnapshot RPC? Figures 12, 13
+  term
+  lastIncludedIndex
+  lastIncludedTerm
+  snapshot data
+
+what does a follower do w/ InstallSnapshot?
+  reject if term is old (not the current leader)
+  reject (ignore) if follower already has last included index/term
+    it's an old/delayed RPC
+  empty the log, replace with fake "prev" entry
+  set lastApplied to lastIncludedIndex
+  replace service state (e.g. k/v table) with snapshot contents
+
+note that the state and the operation history are roughly equivalent
+  designer can choose which to send
+  e.g. last few operations (log entries) for lagging replica,
+    but entire state (snapshot) for a replica that has lost its disk.
+  still, replica repair can be very expensive, and warrants attention
+
+The Question:
+  Could a received InstallSnapshot RPC cause the state machine to go
+  backwards in time? That is, could step 8 in Figure 13 cause the state
+  machine to be reset so that it reflects fewer executed operations? If
+  yes, explain how this could happen. If no, explain why it can't
+  happen.
+
+*** topic: configuration change (not needed for the labs)
+
+configuration change (Section 6)
+  configuration = set of servers
+  sometimes you need to
+    move to a new set of servers, or
+    increase/decrease the number of servers
+  human initiates configuration change, Raft manages it
+  we'd like Raft to cope correctly with failure during configuration change
+    i.e. clients should not notice (except maybe dip in performance)
+
+why doesn't a straightforward approach work?
+  suppose each server has the list of servers in the current config
+  change configuration by telling each server the new list
+    using some mechanism outside of Raft
+  problem: they will learn new configuration at different times
+  example: want to replace S3 with S4
+    we get as far as telling S1 and S4 that the new config is 1,2,4
+    S1: 1,2,3  1,2,4
+    S2: 1,2,3  1,2,3
+    S3: 1,2,3  1,2,3
+    S4:        1,2,4
+  OOPS! now *two* leaders could be elected!
+    S2 and S3 could elect S2
+    S1 and S4 could elect S1
+
+Raft configuration change
+  idea: "joint consensus" stage that includes *both* old and new configuration
+    avoids any time when both old and new can choose leader independently
+  system starts with Cold
+  system administrator asks the leader to switch to Cnew
+  Raft has special configuration log entries (sets of server addresses)
+  each server uses the last configuration in its own log
+  1. leader commits Cold,new to a majority of both Cold and Cnew
+  2. after Cold,new commits, leader commits Cnew to servers in Cnew
+
+what if leader crashes at various points in this process?
+  can we have two leaders for the next term?
+  if that could happen, each leader must be one of these:
+    A. in Cold, but does not have Cold,new in log
+    B. in Cold or Cnew, has Cold,new in log
+    C. in Cnew, has Cnew in log
+  we know we can't have A+A or C+C by the usual rules of leader election
+  A+B? no, since B needs majority from Cold as well as Cnew
+  A+C? no, since can't proceed to Cnew until Cold,new committed to Cold
+  B+B? no, since B needs majority from both Cold and Cnew
+  B+C? no, since B needs majority from Cnew as well as Cold
+
+good! Raft can switch to a new set of servers w/o risk of two active leaders
+
+*** topic: performance
+
+Note: many situations don't require high performance.
+  key/value store might.
+  but GFS or MapReduce master might not.
+
+Most replication systems have similar common-case performance:
+  One RPC exchange and one disk write per agreement.
+  So Raft is pretty typical for message complexity.
+
+Raft makes a few design choices that sacrifice performance for simplicity:
+  Follower rejects out-of-order AppendEntries RPCs.
+    Rather than saving for use after hole is filled.
+    Might be important if network re-orders packets a lot.
+  No provision for batching or pipelining AppendEntries.
+  Snapshotting is wasteful for big states.
+  A slow leader may hurt Raft, e.g. in geo-replication.
+
+These have a big effect on performance:
+  Disk writes for persistence.
+  Message/packet/RPC overhead.
+  Need to execute logged commands sequentially.
+  Fast path for read-only operations.
+

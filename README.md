@@ -1,13 +1,10 @@
-# 2017年春季MIT分布式系统课程实验
+# 2017年春季MIT分布式系统课程labs
 
-## lab1 map reduce
-   see [mapreduce](src/mapreduce)
+- [x] Lab 1: [mapreduce](src/mapreduce)
 
-## lab2 raft
-   see [raft](src/raft)
+- [x] Lab 2: [raft](src/raft)
 
-## lab3 TODO
-   see [kvraft](src/kvraft)
+- [x] Lab 3: [kvraft](src/kvraft)
 
-## lab4 TODO
+- [ ] Lab 4: TODO shardkv
 

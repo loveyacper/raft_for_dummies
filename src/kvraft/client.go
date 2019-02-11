@@ -82,7 +82,7 @@ func (ck *Clerk) Get(key string) string {
             return reply.Value
         } else {
             fail++
-            if reply.WrongLeader || fail >= maxTry {
+            if timeout || reply.WrongLeader || fail >= maxTry {
                 fail = 0
                 ck.leader++
                 if ck.leader >= len(ck.servers) {
@@ -140,7 +140,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
             return
         } else {
             fail++
-            if reply.WrongLeader || fail >= maxTry {
+            if timeout || reply.WrongLeader || fail >= maxTry {
                 fail = 0
                 ck.leader++
                 if ck.leader >= len(ck.servers) {
