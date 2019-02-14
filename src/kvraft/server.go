@@ -60,9 +60,6 @@ type KVServer struct {
     // request records
     requests map[int32]int64 // client -> last commited reqID
 
-    // for snapshot
-    lastIncludedIndex int
-
     // for exit
     shutdown chan interface{}
 }
@@ -97,7 +94,7 @@ func (kv *KVServer) updateIfNotDuplicated(id int32, reqId int64) bool {
 func (kv *KVServer) proposeCommand(cmd Op) bool {
     logIndex, _, isLeader := kv.rf.Start(cmd)
     if !isLeader {
-        DPrintf("[server %d] proposeCommand %d but not leader", kv.me, cmd.ReqID)
+        //DPrintf("[server %d] proposeCommand %d but not leader", kv.me, cmd.ReqID)
         return false
     }
 
@@ -220,8 +217,8 @@ func (kv *KVServer) applyRoutine() {
         var applyMsg raft.ApplyMsg
 
         select {
-        case c := <-kv.shutdown:
-            kv.shutdown <- c
+        case <-kv.shutdown:
+            DPrintf("[server %d] shutdown applyRoutine", kv.me)
             return
 
         case applyMsg = <-kv.applyCh:
@@ -268,7 +265,14 @@ func (kv *KVServer) applyRoutine() {
 
         if kv.maxraftstate >= 0 && kv.rf.RaftStateSize() >= kv.maxraftstate {
             DPrintf("(%d) state size %d", kv.me, kv.rf.RaftStateSize())
-            kv.startSnapshot(applyMsg.CommandIndex)
+            // If I keep mu.Lock, the startSnapshot will use raft's lock
+            // But raft's applyRoutine is keeping lock and apply msg, he will be blocking with held lock.
+            /*
+            go func(index int) {
+                kv.startSnapshot(index)
+            }(applyMsg.CommandIndex)
+            */
+            go kv.startSnapshot(applyMsg.CommandIndex)
         }
 
         kv.mu.Unlock()
@@ -277,24 +281,17 @@ func (kv *KVServer) applyRoutine() {
 
 // for snapshot
 func (kv *KVServer) startSnapshot(lastIndex int) {
-    if kv.lastIncludedIndex != -1 {
-        DPrintf("[server %d] startSnapshot is in progress", kv.me)
-        return
-    }
-
-    DPrintf("[server %d] startSnapshot index %d with data %v", kv.me, lastIndex, kv.data)
     w := new(bytes.Buffer)
     e := labgob.NewEncoder(w)
 
-    kv.lastIncludedIndex = lastIndex
-
-    //e.Encode(kv.lastIncludedIndex)
+    kv.mu.Lock()
+    DPrintf("[server %d] startSnapshot index %d with data %v", kv.me, lastIndex, kv.data)
     e.Encode(kv.data)
     e.Encode(kv.requests)
+    kv.mu.Unlock()
 
     data := w.Bytes()
     kv.rf.StartSnapshot(data, lastIndex)
-    kv.lastIncludedIndex = -1
 }
 
 func (kv *KVServer) loadSnapshot(data []byte) {
@@ -310,7 +307,6 @@ func (kv *KVServer) loadSnapshot(data []byte) {
     kv.data = make(map[string]string)
     kv.requests = make(map[int32]int64)
 
-    //d.Decode(&kv.lastIncludedIndex)
     d.Decode(&kv.data)
     d.Decode(&kv.requests)
 }
@@ -324,7 +320,7 @@ func (kv *KVServer) loadSnapshot(data []byte) {
 func (kv *KVServer) Kill() {
     kv.rf.Kill()
     // Your code here, if desired.
-    kv.shutdown <- 0
+    close(kv.shutdown)
 }
 
 //
@@ -355,16 +351,11 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
     kv.requests = make(map[int32]int64)
     kv.notifyCh = make(map[int]chan Op)
     kv.shutdown = make(chan interface{}, 1)
-    kv.lastIncludedIndex = -1
 
-    kv.applyCh = make(chan raft.ApplyMsg, 10)
+    kv.applyCh = make(chan raft.ApplyMsg, 1)
     kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
     // You may need initialization code here.
-
-    // how to replay the logs from rf?
-    // how to determing the commitIndex now???
-
     go kv.applyRoutine() // listen on applyCh, apply op to state machine
 
     return kv

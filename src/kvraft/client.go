@@ -91,8 +91,10 @@ func (ck *Clerk) Get(key string) string {
             }
         }
 
-        //time.Sleep(3 * time.Millisecond)
-        DPrintf("[client %d] retry GET to another server %d\n", ck.clientId, ck.leader)
+        time.Sleep(1 * time.Millisecond)
+        if fail == 0 {
+            DPrintf("[client %d] retry GET to another server %d\n", ck.clientId, ck.leader)
+        }
     }
 }
 
@@ -149,8 +151,10 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
             }
         }
 
-        //time.Sleep(3 * time.Millisecond)
-        DPrintf("[client %d] retry PUT/APPEND to another server %d\n", ck.clientId, ck.leader)
+        time.Sleep(1 * time.Millisecond)
+        if fail == 0 {
+            DPrintf("[client %d] retry PUT/APPEND to another server %d\n", ck.clientId, ck.leader)
+        }
     }
 }
 

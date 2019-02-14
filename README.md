@@ -4,7 +4,17 @@
 
 - [x] Lab 2: [raft](src/raft)
 
+     - [x] Part 2A: Raft election
+
+     - [x] Part 2B: Raft log replication
+
+     - [x] Part 2C: Raft state persistence
+
 - [x] Lab 3: [kvraft](src/kvraft)
+
+     - [x] Part 3A: Key/value service without log compaction
+
+     - [x] Part 3B: Key/value service with log compaction
 
 - [ ] Lab 4: TODO shardkv
 
