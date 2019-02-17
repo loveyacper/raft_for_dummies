@@ -16,5 +16,9 @@
 
      - [x] Part 3B: Key/value service with log compaction
 
-- [ ] Lab 4: TODO shardkv
+- [ ] Lab 4: Sharded Key/Value Service
+
+     - [x] Part 4A: Shard Master
+
+     - [ ] Part 4B: Sharded Key/Value Server
 

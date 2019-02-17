@@ -1,5 +1,8 @@
 package shardmaster
 
+import "time"
+import "strconv"
+
 //
 // Master shard server: assigns shards to replication groups.
 //
@@ -28,38 +31,70 @@ type Config struct {
 	Groups map[int][]string // gid -> servers[]
 }
 
+func (cfg *Config) String() string {
+    s := "Num:" + strconv.Itoa(cfg.Num) + "\n"
+    s += "shard->gid:\n"
+    for shard, gid := range cfg.Shards {
+        s += strconv.Itoa(shard) + "->" + strconv.Itoa(gid) + "\n"
+    }
+    s += "gid->nservers:\n"
+    for gid, ss := range cfg.Groups {
+        s += strconv.Itoa(gid) + " with nservers " + strconv.Itoa(len(ss)) + "\n"
+    }
+    return s
+}
+
 const (
 	OK = "OK"
+    ErrNotLeader = "ErrNotLeader"
+    ErrDuplicateReq = "ErrDuplicateReq"
 )
 
 type Err string
 
 type JoinArgs struct {
 	Servers map[int][]string // new GID -> servers mappings
+
+    ID int32 // client id
+    ReqID int64
 }
 
 type JoinReply struct {
 	WrongLeader bool
 	Err         Err
+
+    ID int32 // client id
+    RspID int64
 }
 
 type LeaveArgs struct {
 	GIDs []int
+
+    ID int32 // client id
+    ReqID int64
 }
 
 type LeaveReply struct {
 	WrongLeader bool
 	Err         Err
+    ID int32 // client id
+    RspID int64
 }
 
 type MoveArgs struct {
 	Shard int
 	GID   int
+
+    ID int32 // client id
+    ReqID int64
 }
 
 type MoveReply struct {
 	WrongLeader bool
 	Err         Err
+
+    ID int32 // client id
+    RspID int64
 }
 
 type QueryArgs struct {
@@ -71,3 +106,6 @@ type QueryReply struct {
 	Err         Err
 	Config      Config
 }
+
+const RpcTimeout time.Duration = 1000 * time.Millisecond
+
