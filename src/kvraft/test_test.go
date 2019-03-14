@@ -428,6 +428,7 @@ func TestBasic3A(t *testing.T) {
 	GenericTest(t, "3A", 1, false, false, false, -1)
 }
 
+// FIXME sometimes deadlock
 func TestConcurrent3A(t *testing.T) {
 	// Test: many clients (3A) ...
 	GenericTest(t, "3A", 5, false, false, false, -1)
@@ -706,6 +707,7 @@ func TestSnapshotUnreliableRecoverConcurrentPartition3B(t *testing.T) {
 	GenericTest(t, "3B", 5, true, true, true, 1000)
 }
 
+// FIXME sometimes report: test_test.go:409: logs were not trimmed (2565 > 2*1000)
 func TestSnapshotUnreliableRecoverConcurrentPartitionLinearizable3B(t *testing.T) {
 	// Test: unreliable net, restarts, partitions, snapshots, linearizability checks (3B) ...
 	GenericTestLinearizability(t, "3B", 15, 7, true, true, true, 1000)

@@ -92,15 +92,19 @@ func (kv *KVServer) updateIfNotDuplicated(id int32, reqId int64) bool {
 
 // call raft.Start to commit a command as log entry
 func (kv *KVServer) proposeCommand(cmd Op) bool {
+    kv.mu.Lock()
+    // lock kv first, think about:
+    // If no lock with rf.Start, raft maybe very quick to agree.
+    // Then applyRoutine will not find notifyCh on log index,
+    // proposeCommand will block on notifyCh forever.
     logIndex, _, isLeader := kv.rf.Start(cmd)
     if !isLeader {
-        //DPrintf("[server %d] proposeCommand %d but not leader", kv.me, cmd.ReqID)
+        kv.mu.Unlock()
         return false
     }
 
     // wait command to be commited
 
-    kv.mu.Lock()
     // use logIndex because all servers agree on same log index
     ch, ok := kv.notifyCh[logIndex]
     if !ok {
@@ -242,8 +246,8 @@ func (kv *KVServer) applyRoutine() {
         } else if op.Operation == "Append" {
             update := kv.updateIfNotDuplicated(op.ID, op.ReqID)
             if update {
-                DPrintf("[server %d] apply for client %d APPEND key %s, value %s, logindex %d", kv.me, op.ID, op.Key, op.Value, applyMsg.CommandIndex)
                 kv.data[op.Key] += op.Value
+                DPrintf("[server %d] apply for client %d APPEND key %s, value %s, now %s, logindex %d", kv.me, op.ID, op.Key, op.Value, kv.data[op.Key], applyMsg.CommandIndex)
             }
         } else {
             // Do nothing for Get, should I cached reply?
@@ -263,15 +267,10 @@ func (kv *KVServer) applyRoutine() {
             ch <- op
         }
 
-        if kv.maxraftstate >= 0 && kv.rf.RaftStateSize() >= kv.maxraftstate {
+        if kv.maxraftstate > 0 && kv.rf.RaftStateSize() >= kv.maxraftstate {
             DPrintf("(%d) state size %d", kv.me, kv.rf.RaftStateSize())
             // If I keep mu.Lock, the startSnapshot will use raft's lock
             // But raft's applyRoutine is keeping lock and apply msg, he will be blocking with held lock.
-            /*
-            go func(index int) {
-                kv.startSnapshot(index)
-            }(applyMsg.CommandIndex)
-            */
             go kv.startSnapshot(applyMsg.CommandIndex)
         }
 
@@ -309,6 +308,7 @@ func (kv *KVServer) loadSnapshot(data []byte) {
 
     d.Decode(&kv.data)
     d.Decode(&kv.requests)
+    DPrintf("[server %d] load snapshot data %v", kv.me, kv.data)
 }
 
 //

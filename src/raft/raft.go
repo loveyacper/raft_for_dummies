@@ -586,8 +586,8 @@ func checkLockWaitTooLong(s string) chan struct{} {
     ch := make(chan struct{})
     go func() {
         select {
-        case <-time.After(time.Second * 3):
-            DPrintf("DeadLock: " + s)
+        case <-time.After(time.Second * 30):
+            DPrintf("DeadLock:" + s)
             return
             //panic("DeadLock:" + s)
         case <-ch:
@@ -606,7 +606,7 @@ func checkLockHoldTooLong(s string) chan struct{} {
     ch := make(chan struct{})
     go func() {
         select {
-        case <-time.After(time.Second * 3):
+        case <-time.After(time.Second * 30):
             panic("Holding Lock too long: " + s)
         case <-ch:
             return
@@ -714,7 +714,10 @@ func (rf *Raft) appendRoutine(index int) {
         prevTerm = rf.Logs[rf.relativeIndex(prevIdx)].Term
 
         // [nextIndex, len(Logs)) need to sync
-        entries := rf.Logs[rf.relativeIndex(prevIdx+1):]
+        entriesLen := len(rf.Logs) - rf.relativeIndex(prevIdx+1)
+        entries := make([]LogEntry, entriesLen)
+        copy(entries, rf.Logs[rf.relativeIndex(prevIdx+1):]) // should copy logs, or else will report race error
+
         leaderCommit := rf.commitIndex
         rf.mu.Unlock()
 
@@ -729,6 +732,7 @@ func (rf *Raft) appendRoutine(index int) {
                 return
             }
 
+            // TODO sometimes, it blocks too long time
             ch := checkLockWaitTooLong("AppendEntries" + strconv.Itoa(index))
             rf.mu.Lock()
             close(ch)
@@ -976,28 +980,6 @@ func (rf *Raft) applyRoutine() {
 
             rf.applyCh<-msg
         }
-
-        /*
-        //ch := checkLockHoldTooLong("applyRoutine hold lock " + strconv.Itoa(nApply))
-        for i := rf.lastApply+1; i <= rf.commitIndex; i++ {
-            DPrintf("[me %d] apply log abs_index %d, snapIndex %d", rf.me, i, rf.lastIncludedIndex)
-
-            ri := rf.relativeIndex(i)
-            msg := ApplyMsg{}
-            msg.CommandValid = true
-            msg.Command = rf.Logs[ri].Command
-            msg.CommandIndex = rf.Logs[ri].Index
-
-            if msg.Command == nil {
-                msg.CommandValid = false
-            }
-
-            rf.applyCh<-msg
-        }
-        rf.lastApply = rf.commitIndex
-        rf.mu.Unlock()
-        //close(ch)
-        */
     }
 }
 
@@ -1286,11 +1268,13 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
         rf.lastApply = rf.lastIncludedIndex
         relativeLastIndex = 0
     } else {
+        // before install snapshot, logs before lastApply is in my state machine
+        // but after install snapshot, they are lost.
+        // So reset lastApply to snapshot's tail: lastIncludedIndex.
+        // And commitIndex should not decrease.
+        rf.lastApply = rf.lastIncludedIndex
         if rf.commitIndex < rf.lastIncludedIndex {
             rf.commitIndex = rf.lastIncludedIndex
-            rf.lastApply = rf.lastIncludedIndex
-        } else if rf.lastApply < rf.lastIncludedIndex {
-            rf.lastApply = rf.lastIncludedIndex
         }
     }
 
@@ -1299,8 +1283,9 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
     rf.persister.SaveStateAndSnapshot(rf.raftStateBytes(), args.Snapshot)
 
-    DPrintf("[me %d]After InstallSnapshot my index %d, logs %v",
+    DPrintf("[me %d]After InstallSnapshot my commit %d, apply %d, index %d, logs %v",
             rf.me,
+            rf.commitIndex, rf.lastApply,
             rf.lastIncludedIndex, rf.Logs)
 
     rf.mu.Unlock()
