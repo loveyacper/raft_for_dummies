@@ -1,3 +1,8 @@
+当一个leader发生分区后，自己不知道，还在接受命令，追加到raft日志；
+由于命令无法被commit，因此上层的applyCh无法得到通知，也就不能触发snapshot；
+使得snapshot相关测试失败；
+解决办法：leader需要主动检测自己身份失效
+不过一个bug是，为什么leader分区之后还能连续的处理命令，理论上第一个命令就阻塞
 > What are some uses of Raft besides GFS master replication?
 
 You could (and will) build a fault-tolerant key/value database using Raft.

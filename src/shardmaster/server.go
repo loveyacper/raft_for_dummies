@@ -69,7 +69,7 @@ type Response struct {
 }
 
 func (sm *ShardMaster) String() string {
-    s := "[server_" + strconv.Itoa(sm.me) + "]:\n"
+    s := "[master_" + strconv.Itoa(sm.me) + "]:\n"
     for _, cfg := range sm.configs {
         s += cfg.String()
     }
@@ -105,11 +105,11 @@ func (sm *ShardMaster) updateIfNotDuplicated(id int32, reqId int64) bool {
 func (sm *ShardMaster) proposeCommand(cmd Op) (bool, *Response) {
     logIndex, _, isLeader := sm.rf.Start(cmd)
     if !isLeader {
-        //DPrintf("[server %d] proposeCommand %d but not leader", sm.me, cmd.ReqID)
+        //DPrintf("[master %d] proposeCommand %d but not leader", sm.me, cmd.ReqID)
         return false, nil
     }
 
-    DPrintf("[server %d] proposeCommand %d, %s, logIdx %d", sm.me, cmd.ReqID, cmd.Operation, logIndex)
+    DPrintf("[master %d] proposeCommand %d, %s, logIdx %d", sm.me, cmd.ReqID, cmd.Operation, logIndex)
 
     // wait command to be commited
     sm.mu.Lock()
@@ -160,7 +160,7 @@ func (sm *ShardMaster) Join(args *JoinArgs, reply *JoinReply) {
         }
     }
 
-    DPrintf("[server %d] JoinRPC args %v", sm.me, args)
+    DPrintf("[master %d] JoinRPC args %v", sm.me, args)
 
     // check if repeated request, useless but efficient
     duplicate := sm.isDuplicated(args.ID, args.ReqID)
@@ -201,7 +201,7 @@ func (sm *ShardMaster) Leave(args *LeaveArgs, reply *LeaveReply) {
         return
     }
 
-    DPrintf("[server %d] LeaveRPC args %v", sm.me, args)
+    DPrintf("[master %d] LeaveRPC args %v", sm.me, args)
 
     cmd := Op{}
     cmd.Operation = "leave"
@@ -230,7 +230,7 @@ func (sm *ShardMaster) Move(args *MoveArgs, reply *MoveReply) {
         return
     }
 
-    DPrintf("[server %d] MoveRPC args %v", sm.me, args)
+    DPrintf("[master %d] MoveRPC args %v", sm.me, args)
 
     cmd := Op{}
     cmd.Operation = "move"
@@ -363,7 +363,7 @@ func (sm *ShardMaster) applyRoutine() {
 
         select {
         case <-sm.shutdown:
-            DPrintf("[server %d] shutdown applyRoutine", sm.me)
+            DPrintf("[master %d] shutdown applyRoutine", sm.me)
             return
 
         case applyMsg = <-sm.applyCh:
@@ -389,14 +389,14 @@ func (sm *ShardMaster) applyRoutine() {
                     cfg.Groups[k] = v
                 }
 
-                DPrintf("[server %d] apply for client %d Join logindex %d, new cfg %v", sm.me, op.ID, applyMsg.CommandIndex, cfg)
+                DPrintf("[master %d] apply for client %d Join logindex %d, new cfg %v", sm.me, op.ID, applyMsg.CommandIndex, cfg)
                 sm.configs = append(sm.configs, cfg)
                 rebalance = true
             }
         } else if op.Operation == "leave" {
             update := sm.updateIfNotDuplicated(op.ID, op.ReqID)
             if update {
-                DPrintf("[server %d] apply for client %d Leave logindex %d", sm.me, op.ID, applyMsg.CommandIndex)
+                DPrintf("[master %d] apply for client %d Leave logindex %d", sm.me, op.ID, applyMsg.CommandIndex)
                 cfg := sm.copyLastConfig()
                 for _, id := range op.GIDs {
                     delete (cfg.Groups, id)
@@ -413,7 +413,7 @@ func (sm *ShardMaster) applyRoutine() {
         } else if op.Operation == "move" {
             update := sm.updateIfNotDuplicated(op.ID, op.ReqID)
             if update {
-                DPrintf("[server %d] apply for client %d Move logindex %d", sm.me, op.ID, applyMsg.CommandIndex)
+                DPrintf("[master %d] apply for client %d Move logindex %d", sm.me, op.ID, applyMsg.CommandIndex)
                 cfg := sm.copyLastConfig()
                 cfg.Shards[op.Shard] = op.GID
 
@@ -465,6 +465,7 @@ func (sm *ShardMaster) Raft() *raft.Raft {
 // me is the index of the current server in servers[].
 //
 func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister) *ShardMaster {
+    DPrintf("[master %d] StartServer", me)
     sm := new(ShardMaster)
     sm.me = me
 

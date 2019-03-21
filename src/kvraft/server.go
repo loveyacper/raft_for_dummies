@@ -33,11 +33,6 @@ type Op struct {
     ReqID int64
 }
 
-type LastReply struct {
-    ReqID int64
-    Reply *GetReply
-}
-
 type KVServer struct {
     mu sync.Mutex
     me int

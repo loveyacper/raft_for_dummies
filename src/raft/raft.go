@@ -533,6 +533,25 @@ func (rf *Raft) switchToCandidate() {
     rf.resetElectWithRandTimeout()
 }
 
+
+// when leader recv bigger term in response
+func (rf *Raft) leaderStepDown(newTerm int) {
+    if newTerm <= rf.CurrentTerm {
+        panic("leaderStepDown with small term")
+    }
+
+    rf.CurrentTerm = newTerm
+    rf.leader = -1 // the remote may not be leader
+    rf.leaderActive = false
+
+    rf.VotedFor = -1
+    rf.persist()
+
+    if rf.state != Follower {
+        rf.switchToFollower()
+    }
+}
+
 func (rf *Raft) switchToFollower() {
     DPrintf("[me %d]switchToFollower, prev state %d, leader Active %v, leaderId %d",
             rf.me,
@@ -675,12 +694,8 @@ func (rf *Raft) appendRoutine(index int) {
                     }
 
                     if reply.Term > rf.CurrentTerm {
-                        rf.CurrentTerm = reply.Term
-                        rf.leader = index
-                        rf.leaderActive = true
-                        if rf.state != Follower {
-                            rf.switchToFollower()
-                        }
+                        DPrintf("[me %d] bigger install_snapshot reply term %d", rf.me, reply.Term)
+                        rf.leaderStepDown(reply.Term)
                         rf.persist()
                     } else {
                         // snapshot success
@@ -717,7 +732,6 @@ func (rf *Raft) appendRoutine(index int) {
         entriesLen := len(rf.Logs) - rf.relativeIndex(prevIdx+1)
         entries := make([]LogEntry, entriesLen)
         copy(entries, rf.Logs[rf.relativeIndex(prevIdx+1):]) // should copy logs, or else will report race error
-
         leaderCommit := rf.commitIndex
         rf.mu.Unlock()
 
@@ -779,13 +793,8 @@ func (rf *Raft) appendRoutine(index int) {
             } else {
                 if rf.CurrentTerm < reply.Term {
                     DPrintf("[me %d] bigger heartbeat reply term %d", rf.me, reply.Term)
-                    rf.CurrentTerm = reply.Term
-                    rf.leader = -1
-                    rf.leaderActive = false
-
-                    rf.VotedFor = -1
+                    rf.leaderStepDown(reply.Term)
                     rf.persist()
-                    rf.switchToFollower()
                 } else {
                     //rf.nextIndex[index] -= 1
                     if rf.nextIndex[index] - reply.FirstIndexOfFailTerm > 1 {
@@ -858,7 +867,8 @@ func (rf *Raft) checkLeaderAlive() {
             if rf.state == Leader {
                 // ignore this timer in leader state
                 rf.mu.Unlock()
-                return
+                continue
+                // TODO leader must check if it's still leader or be partioned
             }
 
             if rf.leaderActive {
@@ -1241,7 +1251,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
     rf.CurrentTerm = args.Term
     rf.leader = args.LeaderId
-    rf.leaderActive = true
+    rf.leaderActive = true // DO NOT forget update heartbeat
     if rf.state != Follower {
         rf.switchToFollower()
     }
@@ -1272,6 +1282,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
         // but after install snapshot, they are lost.
         // So reset lastApply to snapshot's tail: lastIncludedIndex.
         // And commitIndex should not decrease.
+        DPrintf("[me %d]Before my commit %d, apply %d, index %d", rf.me, rf.commitIndex, rf.lastApply, rf.lastIncludedIndex)
         rf.lastApply = rf.lastIncludedIndex
         if rf.commitIndex < rf.lastIncludedIndex {
             rf.commitIndex = rf.lastIncludedIndex
@@ -1358,6 +1369,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
     // start a goroutine for apply commited logs
     go rf.applyRoutine()
 
+    DPrintf("[me %d]: bootstrap apply %d, commit %d", rf.me, rf.lastApply, rf.commitIndex)
     return rf
 }
 

@@ -20,5 +20,9 @@
 
      - [x] Part 4A: Shard Master
 
-     - [ ] Part 4B: Sharded Key/Value Server
+     - [x] Part 4B: Sharded Key/Value Server
+
+     - [ ] Challenge: Garbage collection of state
+
+     - [ ] Challenge: Client requests during configuration changes
 
